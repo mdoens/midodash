@@ -11,7 +11,7 @@ class MomentumService
     /** @var array<string, array{name: string, role: string, equity: bool}> */
     public const TICKERS = [
         'IWDA.AS' => ['name' => 'MSCI World', 'role' => 'Aandelen large cap', 'equity' => true],
-        'SXRG.AS' => ['name' => 'Small Cap', 'role' => 'Aandelen small cap', 'equity' => true],
+        'IUSN.DE' => ['name' => 'Small Cap', 'role' => 'Aandelen small cap', 'equity' => true],
         'IEMA.AS' => ['name' => 'Emerging Markets', 'role' => 'Groei / dollar zwak', 'equity' => false],
         'IBCI.AS' => ['name' => 'Inflation Bonds', 'role' => 'Obligaties inflatie', 'equity' => false],
         'SGLD.L'  => ['name' => 'Physical Gold', 'role' => 'Crisis diversificator', 'equity' => false],
