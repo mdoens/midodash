@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 COOLIFY_URL="https://coolify.barcelona2.doens.nl"
-COOLIFY_TOKEN="${COOLIFY_TOKEN:?Set COOLIFY_TOKEN env var}"
 APP_UUID="mw0ks0s8sc8cw0csocwksskk"
+
+# Lees COOLIFY_TOKEN uit .env.local als niet al gezet
+if [ -z "${COOLIFY_TOKEN:-}" ] && [ -f "${SCRIPT_DIR}/.env.local" ]; then
+    COOLIFY_TOKEN=$(grep -m1 '^COOLIFY_TOKEN=' "${SCRIPT_DIR}/.env.local" | cut -d= -f2- | tr -d "'" | tr -d '"')
+fi
+: "${COOLIFY_TOKEN:?Set COOLIFY_TOKEN in .env.local of als env var}"
 
 # Commit en push
 echo "==> Git push..."
