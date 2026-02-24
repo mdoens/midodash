@@ -184,6 +184,13 @@ php bin/console cache:clear
 - NEVER use `@suppress` or `@phpstan-ignore` without documenting why
 - NO `__construct` property promotion without `readonly` keyword
 
+### Security — CRITICAL
+- **NEVER commit secrets, API keys, tokens, or passwords to git** — not in `.env`, not in any file
+- Secrets belong ONLY in `.env.local` (gitignored) for local dev and in Coolify env vars for production
+- The `.env` file in git may ONLY contain empty placeholders (e.g. `IB_TOKEN=`)
+- Before every commit, verify no secrets are staged: check `.env`, config files, and any new files
+- If secrets are accidentally committed, immediately remove them from git history (force push) and rotate the compromised credentials
+
 ### Symfony
 - NO business logic in controllers — use services
 - NO service locator pattern — use dependency injection
