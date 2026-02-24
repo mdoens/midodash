@@ -1,21 +1,24 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Service;
 
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class SaxoClient
 {
-    private string $appKey;
-    private string $appSecret;
-    private string $redirectUri;
-    private string $authEndpoint;
-    private string $tokenEndpoint;
-    private string $apiBase;
-    private string $tokenFile;
+    private readonly string $appKey;
+    private readonly string $appSecret;
+    private readonly string $redirectUri;
+    private readonly string $authEndpoint;
+    private readonly string $tokenEndpoint;
+    private readonly string $apiBase;
+    private readonly string $tokenFile;
 
-    public function __construct(private HttpClientInterface $httpClient)
-    {
+    public function __construct(
+        private readonly HttpClientInterface $httpClient,
+    ) {
         $this->appKey = $_ENV['SAXO_APP_KEY'];
         $this->appSecret = $_ENV['SAXO_APP_SECRET'];
         $this->redirectUri = $_ENV['SAXO_REDIRECT_URI'];
@@ -35,6 +38,11 @@ class SaxoClient
         ]);
     }
 
+    /**
+     * @return array<string, mixed>
+     *
+     * @throws \RuntimeException
+     */
     public function exchangeCode(string $code): array
     {
         $response = $this->httpClient->request('POST', $this->tokenEndpoint, [
@@ -54,13 +62,17 @@ class SaxoClient
         }
 
         $this->saveTokens($tokens);
+
         return $tokens;
     }
 
+    /**
+     * @return array<string, mixed>|null
+     */
     public function refreshToken(): ?array
     {
         $tokens = $this->loadTokens();
-        if (!$tokens || !isset($tokens['refresh_token'])) {
+        if ($tokens === null || !isset($tokens['refresh_token'])) {
             return null;
         }
 
@@ -81,16 +93,22 @@ class SaxoClient
             }
 
             $this->saveTokens($newTokens);
+
             return $newTokens;
         } catch (\Throwable) {
             return null;
         }
     }
 
+    /**
+     * @return array<int, array<string, mixed>>|null
+     */
     public function getPositions(): ?array
     {
         $token = $this->getValidToken();
-        if (!$token) return null;
+        if ($token === null) {
+            return null;
+        }
 
         $response = $this->httpClient->request('GET', $this->apiBase . '/port/v1/positions/me', [
             'headers' => ['Authorization' => 'Bearer ' . $token],
@@ -98,31 +116,41 @@ class SaxoClient
         ]);
 
         if ($response->getStatusCode() === 401) {
-            // Try refresh
             $refreshed = $this->refreshToken();
-            if (!$refreshed) return null;
+            if ($refreshed === null) {
+                return null;
+            }
 
             $response = $this->httpClient->request('GET', $this->apiBase . '/port/v1/positions/me', [
                 'headers' => ['Authorization' => 'Bearer ' . $refreshed['access_token']],
                 'query' => ['FieldGroups' => 'DisplayAndFormat,PositionBase,PositionView'],
             ]);
 
-            if ($response->getStatusCode() === 401) return null;
+            if ($response->getStatusCode() === 401) {
+                return null;
+            }
         }
 
         $data = $response->toArray(false);
+
         return $this->parsePositions($data);
     }
 
+    /**
+     * @return array<string, mixed>|null
+     */
     public function getAccountBalance(): ?array
     {
         $token = $this->getValidToken();
-        if (!$token) return null;
+        if ($token === null) {
+            return null;
+        }
 
         try {
             $response = $this->httpClient->request('GET', $this->apiBase . '/port/v1/balances/me', [
                 'headers' => ['Authorization' => 'Bearer ' . $token],
             ]);
+
             return $response->toArray(false);
         } catch (\Throwable) {
             return null;
@@ -137,21 +165,25 @@ class SaxoClient
     public function getTokenExpiry(): ?int
     {
         $tokens = $this->loadTokens();
-        if (!$tokens || !isset($tokens['created_at'], $tokens['expires_in'])) return null;
-        return $tokens['created_at'] + $tokens['expires_in'];
+        if ($tokens === null || !isset($tokens['created_at'], $tokens['expires_in'])) {
+            return null;
+        }
+
+        return (int) $tokens['created_at'] + (int) $tokens['expires_in'];
     }
 
     private function getValidToken(): ?string
     {
         $tokens = $this->loadTokens();
-        if (!$tokens || !isset($tokens['access_token'])) return null;
+        if ($tokens === null || !isset($tokens['access_token'])) {
+            return null;
+        }
 
-        // Check expiry
         if (isset($tokens['created_at'], $tokens['expires_in'])) {
-            $expiresAt = $tokens['created_at'] + $tokens['expires_in'];
+            $expiresAt = (int) $tokens['created_at'] + (int) $tokens['expires_in'];
             if (time() > $expiresAt - 60) {
-                // Token expired or about to expire, try refresh
                 $refreshed = $this->refreshToken();
+
                 return $refreshed['access_token'] ?? null;
             }
         }
@@ -159,6 +191,11 @@ class SaxoClient
         return $tokens['access_token'];
     }
 
+    /**
+     * @param array<string, mixed> $data
+     *
+     * @return array<int, array<string, mixed>>
+     */
     private function parsePositions(array $data): array
     {
         $positions = [];
@@ -180,20 +217,37 @@ class SaxoClient
                 'exposure' => $view['ExposureInBaseCurrency'] ?? 0,
             ];
         }
+
         return $positions;
     }
 
+    /**
+     * @param array<string, mixed> $tokens
+     */
     private function saveTokens(array $tokens): void
     {
         $tokens['created_at'] = time();
         $dir = dirname($this->tokenFile);
-        if (!is_dir($dir)) mkdir($dir, 0755, true);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
         file_put_contents($this->tokenFile, json_encode($tokens, JSON_PRETTY_PRINT));
     }
 
+    /**
+     * @return array<string, mixed>|null
+     */
     private function loadTokens(): ?array
     {
-        if (!file_exists($this->tokenFile)) return null;
-        return json_decode(file_get_contents($this->tokenFile), true);
+        if (!file_exists($this->tokenFile)) {
+            return null;
+        }
+
+        $content = file_get_contents($this->tokenFile);
+        if ($content === false) {
+            return null;
+        }
+
+        return json_decode($content, true);
     }
 }

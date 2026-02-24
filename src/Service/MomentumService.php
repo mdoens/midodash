@@ -1,11 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Service;
 
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class MomentumService
 {
+    /** @var array<string, array{name: string, role: string, equity: bool}> */
     public const TICKERS = [
         'IWDA.AS' => ['name' => 'MSCI World', 'role' => 'Aandelen large cap', 'equity' => true],
         'SXRG.AS' => ['name' => 'Small Cap', 'role' => 'Aandelen small cap', 'equity' => true],
@@ -15,10 +18,14 @@ class MomentumService
         'XEON.DE' => ['name' => '€STR Cash', 'role' => 'Cash equivalent', 'equity' => false],
     ];
 
-    public function __construct(private HttpClientInterface $httpClient)
-    {
+    public function __construct(
+        private readonly HttpClientInterface $httpClient,
+    ) {
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function getSignal(): array
     {
         $regime = $this->checkRegime();
@@ -33,7 +40,7 @@ class MomentumService
             ];
         }
 
-        $positief = array_filter($scores, fn($s) => $s['score'] > 0);
+        $positief = array_filter($scores, fn(array $s): bool => $s['score'] > 0);
 
         if (empty($positief)) {
             return [
@@ -50,11 +57,15 @@ class MomentumService
 
         foreach ($positief as $ticker => $info) {
             if ($info['equity']) {
-                if ($seenEquity) continue;
+                if ($seenEquity) {
+                    continue;
+                }
                 $seenEquity = true;
             }
             $top2[] = $ticker;
-            if (count($top2) >= 2) break;
+            if (count($top2) >= 2) {
+                break;
+            }
         }
 
         if (count($top2) === 1) {
@@ -80,6 +91,9 @@ class MomentumService
         ];
     }
 
+    /**
+     * @return array<string, array<string, mixed>>
+     */
     public function calculateScores(): array
     {
         $scores = [];
@@ -100,20 +114,24 @@ class MomentumService
             ];
         }
 
-        uasort($scores, fn($a, $b) => $b['score'] <=> $a['score']);
+        uasort($scores, fn(array $a, array $b): int => $b['score'] <=> $a['score']);
+
         return $scores;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function checkRegime(): array
     {
         $prices = $this->fetchDailyPrices('IWDA.AS', 300);
-        $prices = array_filter($prices, fn($p) => $p !== null && $p > 0);
+        $prices = array_filter($prices, fn(mixed $p): bool => $p !== null && $p > 0);
 
         if (count($prices) < 200) {
             return ['bull' => true, 'price' => 0, 'ma200' => 0, 'error' => 'Onvoldoende data'];
         }
 
-        $last = end($prices);
+        $last = (float) end($prices);
         $ma200 = array_sum(array_slice($prices, -200)) / 200;
 
         return [
@@ -123,6 +141,9 @@ class MomentumService
         ];
     }
 
+    /**
+     * @return array<string, float>
+     */
     private function fetchMonthlyPrices(string $ticker): array
     {
         $end = time();
@@ -130,36 +151,50 @@ class MomentumService
 
         $url = sprintf(
             'https://query1.finance.yahoo.com/v8/finance/chart/%s?period1=%d&period2=%d&interval=1mo',
-            urlencode($ticker), $start, $end
+            urlencode($ticker),
+            $start,
+            $end
         );
 
         return $this->fetchYahoo($url);
     }
 
+    /**
+     * @return array<int, float|null>
+     */
     private function fetchDailyPrices(string $ticker, int $days): array
     {
         $end = time();
-        $start = $end - (int)($days * 1.5 * 86400);
+        $start = $end - (int) ($days * 1.5 * 86400);
 
         $url = sprintf(
             'https://query1.finance.yahoo.com/v8/finance/chart/%s?period1=%d&period2=%d&interval=1d',
-            urlencode($ticker), $start, $end
+            urlencode($ticker),
+            $start,
+            $end
         );
 
         $data = $this->fetchYahooRaw($url);
         $result = $data['chart']['result'][0] ?? null;
-        if (!$result) return [];
+        if ($result === null) {
+            return [];
+        }
 
         return $result['indicators']['adjclose'][0]['adjclose']
             ?? $result['indicators']['quote'][0]['close']
             ?? [];
     }
 
+    /**
+     * @return array<string, float>
+     */
     private function fetchYahoo(string $url): array
     {
         $data = $this->fetchYahooRaw($url);
         $result = $data['chart']['result'][0] ?? null;
-        if (!$result) return [];
+        if ($result === null) {
+            return [];
+        }
 
         $timestamps = $result['timestamp'] ?? [];
         $closes = $result['indicators']['adjclose'][0]['adjclose']
@@ -169,12 +204,16 @@ class MomentumService
         $prices = [];
         foreach ($timestamps as $i => $ts) {
             if (isset($closes[$i]) && $closes[$i] !== null) {
-                $prices[date('Y-m', $ts)] = (float)$closes[$i];
+                $prices[date('Y-m', (int) $ts)] = (float) $closes[$i];
             }
         }
+
         return $prices;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function fetchYahooRaw(string $url): array
     {
         try {
@@ -182,43 +221,62 @@ class MomentumService
                 'headers' => ['User-Agent' => 'Mozilla/5.0'],
                 'timeout' => 10,
             ]);
+
             return $response->toArray(false);
         } catch (\Throwable) {
             return [];
         }
     }
 
+    /**
+     * @param array<string, float> $prices
+     *
+     * @return array<int, float>
+     */
     private function monthlyReturns(array $prices): array
     {
         $values = array_values($prices);
         $returns = [];
-        for ($i = 1; $i < count($values); $i++) {
+        $count = count($values);
+        for ($i = 1; $i < $count; $i++) {
             if ($values[$i - 1] > 0) {
                 $returns[] = ($values[$i] - $values[$i - 1]) / $values[$i - 1];
             }
         }
+
         return $returns;
     }
 
+    /**
+     * @param array<int, float> $returns
+     */
     private function momentumScore(array $returns): float
     {
-        if (count($returns) < 7) return -999;
+        if (count($returns) < 7) {
+            return -999.0;
+        }
 
         $window = count($returns) >= 13
             ? array_slice($returns, -13, 12)
             : array_slice($returns, 0, -1);
 
-        if (count($window) < 6) return -999;
+        if (count($window) < 6) {
+            return -999.0;
+        }
 
         $mean = array_sum($window) / count($window);
-        if ($mean <= 0) return -999;
+        if ($mean <= 0) {
+            return -999.0;
+        }
 
-        $variance = 0;
+        $variance = 0.0;
         foreach ($window as $r) {
             $variance += ($r - $mean) ** 2;
         }
         $std = sqrt($variance / count($window));
-        if ($std <= 0) return -999;
+        if ($std <= 0) {
+            return -999.0;
+        }
 
         return round($mean / $std, 3);
     }

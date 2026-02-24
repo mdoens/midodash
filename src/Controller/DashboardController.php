@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Controller;
 
 use App\Service\IbClient;
@@ -33,8 +35,8 @@ class DashboardController extends AbstractController
             }
         }
 
-        $saxoTotalPnl = $saxoPositions ? array_sum(array_column($saxoPositions, 'pnl')) : 0;
-        $saxoTotalExposure = $saxoPositions ? array_sum(array_column($saxoPositions, 'exposure')) : 0;
+        $saxoTotalPnl = $saxoPositions !== null ? array_sum(array_column($saxoPositions, 'pnl')) : 0;
+        $saxoTotalExposure = $saxoPositions !== null ? array_sum(array_column($saxoPositions, 'exposure')) : 0;
 
         // Momentum signaal
         $signal = $momentumService->getSignal();

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Controller;
 
 use App\Service\SaxoClient;
@@ -24,9 +26,10 @@ class SaxoAuthController extends AbstractController
     {
         $code = $request->query->get('code');
 
-        if (!$code) {
+        if ($code === null) {
             $error = $request->query->get('error', 'onbekend');
             $this->addFlash('error', 'Saxo login mislukt: ' . $error);
+
             return $this->redirectToRoute('dashboard');
         }
 
@@ -45,7 +48,7 @@ class SaxoAuthController extends AbstractController
     {
         $result = $saxoClient->refreshToken();
 
-        if ($result) {
+        if ($result !== null) {
             $this->addFlash('success', 'Token vernieuwd.');
         } else {
             $this->addFlash('error', 'Token refresh mislukt. Log opnieuw in.');
