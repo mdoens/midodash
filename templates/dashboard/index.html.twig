@@ -57,7 +57,7 @@
     </div>
 
     {# Allocatie balk #}
-    {% set colors = {'IWDA.AS': '#3b82f6', 'AVWS.DE': '#8b5cf6', 'IEMA.AS': '#f59e0b', 'IBCI.AS': '#06b6d4', 'SGLD.L': '#eab308', 'XEON.DE': '#6b7280'} %}
+    {% set colors = {'IWDA.AS': '#3b82f6', 'AVWC.DE': '#6366f1', 'AVWS.DE': '#8b5cf6', 'ZPRX.DE': '#a855f7', 'IEMA.AS': '#f59e0b', 'AVEM.DE': '#f97316', 'IBCI.AS': '#06b6d4', 'SGLD.L': '#eab308', 'XEON.DE': '#6b7280'} %}
     <div class="alloc-bar">
         {% for ticker, weight in signal.allocation %}
             <div style="width: {{ (weight * 100)|round }}%; background: {{ colors[ticker] ?? '#6366f1' }};">
