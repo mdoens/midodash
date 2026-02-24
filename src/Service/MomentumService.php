@@ -8,14 +8,14 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class MomentumService
 {
-    /** @var array<string, array{name: string, role: string, equity: bool}> */
+    /** @var array<string, array{name: string, role: string, equity: bool, cash: bool}> */
     public const TICKERS = [
-        'IWDA.AS' => ['name' => 'MSCI World', 'role' => 'Aandelen large cap', 'equity' => true],
-        'IUSN.DE' => ['name' => 'Small Cap', 'role' => 'Aandelen small cap', 'equity' => true],
-        'IEMA.AS' => ['name' => 'Emerging Markets', 'role' => 'Groei / dollar zwak', 'equity' => false],
-        'IBCI.AS' => ['name' => 'Inflation Bonds', 'role' => 'Obligaties inflatie', 'equity' => false],
-        'SGLD.L'  => ['name' => 'Physical Gold', 'role' => 'Crisis diversificator', 'equity' => false],
-        'XEON.DE' => ['name' => '€STR Cash', 'role' => 'Cash equivalent', 'equity' => false],
+        'IWDA.AS' => ['name' => 'MSCI World', 'role' => 'Aandelen large cap', 'equity' => true, 'cash' => false],
+        'IUSN.DE' => ['name' => 'Small Cap', 'role' => 'Aandelen small cap', 'equity' => true, 'cash' => false],
+        'IEMA.AS' => ['name' => 'Emerging Markets', 'role' => 'Groei / dollar zwak', 'equity' => false, 'cash' => false],
+        'IBCI.AS' => ['name' => 'Inflation Bonds', 'role' => 'Obligaties inflatie', 'equity' => false, 'cash' => false],
+        'SGLD.L'  => ['name' => 'Physical Gold', 'role' => 'Crisis diversificator', 'equity' => false, 'cash' => false],
+        'XEON.DE' => ['name' => '€STR Cash', 'role' => 'Cash equivalent', 'equity' => false, 'cash' => true],
     ];
 
     public function __construct(
@@ -40,7 +40,7 @@ class MomentumService
             ];
         }
 
-        $positief = array_filter($scores, fn(array $s): bool => $s['score'] > 0);
+        $positief = array_filter($scores, fn(array $s): bool => $s['score'] > 0 && !$s['cash']);
 
         if (empty($positief)) {
             return [
@@ -109,6 +109,7 @@ class MomentumService
                 'name' => $info['name'],
                 'role' => $info['role'],
                 'equity' => $info['equity'],
+                'cash' => $info['cash'],
                 'score' => $score,
                 'last_price' => $lastPrice,
             ];
