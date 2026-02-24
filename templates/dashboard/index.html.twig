@@ -168,10 +168,12 @@
                         <th class="text-right">Open</th>
                         <th class="text-right">Huidig</th>
                         <th class="text-right">P/L</th>
+                        <th class="text-right">P/L %</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for pos in saxo_positions %}
+                    {% set pnl_pct = pos.open_price > 0 ? ((pos.current_price - pos.open_price) / pos.open_price) * 100 : 0 %}
                     <tr>
                         <td class="mono">{{ pos.symbol }}</td>
                         <td>{{ pos.description|length > 25 ? pos.description[:25] ~ '...' : pos.description }}</td>
@@ -179,10 +181,11 @@
                         <td class="text-right mono">{{ pos.open_price|number_format(2, ',', '.') }}</td>
                         <td class="text-right mono">{{ pos.current_price|number_format(2, ',', '.') }}</td>
                         <td class="text-right mono {{ pos.pnl >= 0 ? 'text-green' : 'text-red' }}">{{ pos.pnl|number_format(0, ',', '.') }}</td>
+                        <td class="text-right mono {{ pnl_pct >= 0 ? 'text-green' : 'text-red' }}">{{ pnl_pct|number_format(1) }}%</td>
                     </tr>
                     {% endfor %}
                     <tr style="font-weight: 600;">
-                        <td colspan="5">Totaal P/L</td>
+                        <td colspan="6">Totaal P/L</td>
                         <td class="text-right mono {{ saxo_total_pnl >= 0 ? 'text-green' : 'text-red' }}">{{ saxo_total_pnl|number_format(0, ',', '.') }}</td>
                     </tr>
                 </tbody>
