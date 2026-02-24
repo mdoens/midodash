@@ -39,13 +39,21 @@ curl -X POST -H "Authorization: Bearer $COOLIFY_TOKEN" \
   https://coolify.barcelona2.doens.nl/api/v1/deploy
 ```
 
-### Environment Variables (Coolify)
-All secrets are stored as Coolify env vars, never in git:
-- `APP_ENV`, `APP_SECRET`
+### Environment Variables & Secrets
+All secrets are stored in two places — NEVER in git:
+1. **`.env.local`** (gitignored) — for local development
+2. **Coolify env vars** — for production
+
+Secret env vars:
 - `IB_TOKEN`, `IB_QUERY_ID`
-- `SAXO_APP_KEY`, `SAXO_APP_SECRET`, `SAXO_REDIRECT_URI`
-- `SAXO_AUTH_ENDPOINT`, `SAXO_TOKEN_ENDPOINT`, `SAXO_API_BASE`
+- `SAXO_APP_KEY`, `SAXO_APP_SECRET`
 - `DASHBOARD_PASSWORD_HASH`
+- `COOLIFY_TOKEN` (used by `deploy.sh`, stored in `.env.local`)
+- `APP_SECRET`
+
+Non-secret env vars (safe in `.env`):
+- `APP_ENV`, `APP_SHARE_DIR`, `DEFAULT_URI`
+- `SAXO_REDIRECT_URI`, `SAXO_AUTH_ENDPOINT`, `SAXO_TOKEN_ENDPOINT`, `SAXO_API_BASE`
 
 ### Docker
 - Image: `php:8.4-apache`
