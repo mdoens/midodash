@@ -36,7 +36,7 @@ curl_close($ch);
 
 $tokens = json_decode($response, true);
 
-if ($httpCode !== 200 || !isset($tokens['access_token'])) {
+if ($httpCode >= 300 || !isset($tokens['access_token'])) {
     die("Token exchange mislukt (HTTP {$httpCode}): " . $response);
 }
 

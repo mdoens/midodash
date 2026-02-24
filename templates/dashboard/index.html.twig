@@ -1,0 +1,189 @@
+{% extends 'base.html.twig' %}
+
+{% block body %}
+<header>
+    <div>
+        <h1>MIDO Dashboard</h1>
+        <div class="subtitle">Tactische Sleeve Strategie — {{ "now"|date("d M Y H:i") }}</div>
+    </div>
+    <div>
+        {% if saxo_authenticated %}
+            <span class="badge badge-green">Saxo verbonden</span>
+        {% else %}
+            <a href="{{ path('saxo_login') }}" class="btn btn-primary btn-sm">Saxo Inloggen</a>
+        {% endif %}
+    </div>
+</header>
+
+{# === TOTAAL OVERZICHT === #}
+<div class="grid grid-4" style="margin-bottom: 1.5rem;">
+    <div class="card stat">
+        <div class="stat-label">Totaal Vermogen</div>
+        <div class="stat-value mono">{{ grand_total|number_format(0, ',', '.') }}</div>
+    </div>
+    <div class="card stat">
+        <div class="stat-label">IB Portefeuille</div>
+        <div class="stat-value mono">{{ ib_total_value|number_format(0, ',', '.') }}</div>
+    </div>
+    <div class="card stat">
+        <div class="stat-label">Saxo Portefeuille</div>
+        <div class="stat-value mono">{{ saxo_total_exposure|number_format(0, ',', '.') }}</div>
+    </div>
+    <div class="card stat">
+        <div class="stat-label">Regime</div>
+        <div class="stat-value">
+            {% if signal.regime.bull %}
+                <span class="text-green">BULL</span>
+            {% else %}
+                <span class="text-red">BEAR</span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{# === MOMENTUM SIGNAAL === #}
+<div class="card" style="margin-bottom: 1.5rem;">
+    <h2>Momentum Signaal <span class="badge {{ signal.regime.bull ? 'badge-green' : 'badge-red' }}">{{ signal.regime.bull ? 'Bull' : 'Bear' }} Regime</span></h2>
+
+    <div class="signal-box {{ signal.regime.bull ? 'signal-bull' : 'signal-bear' }}" style="margin-bottom: 1rem;">
+        <strong>{{ signal.reason }}</strong>
+        <div class="text-muted" style="font-size: 0.8rem; margin-top: 0.25rem;">
+            IWDA: {{ signal.regime.price }} | MA200: {{ signal.regime.ma200 }}
+        </div>
+    </div>
+
+    {# Allocatie balk #}
+    {% set colors = {'IWDA.AS': '#3b82f6', 'SXRG.AS': '#8b5cf6', 'IEMA.AS': '#f59e0b', 'IBCI.AS': '#06b6d4', 'SGLD.L': '#eab308', 'XEON.DE': '#6b7280'} %}
+    <div class="alloc-bar">
+        {% for ticker, weight in signal.allocation %}
+            <div style="width: {{ (weight * 100)|round }}%; background: {{ colors[ticker] ?? '#6366f1' }};">
+                {{ ticker|split('.')[0] }} {{ (weight * 100)|round }}%
+            </div>
+        {% endfor %}
+    </div>
+
+    {# Scores tabel #}
+    <table>
+        <thead>
+            <tr>
+                <th>ETF</th>
+                <th>Naam</th>
+                <th>Rol</th>
+                <th class="text-right">Prijs</th>
+                <th class="text-right">Score</th>
+                <th>Signaal</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ticker, s in signal.scores %}
+            <tr>
+                <td class="mono">{{ ticker }}</td>
+                <td>{{ s.name }}</td>
+                <td class="text-muted">{{ s.role }}</td>
+                <td class="text-right mono">{{ s.last_price|number_format(2, ',', '.') }}</td>
+                <td class="text-right mono {{ s.score > 0 ? 'text-green' : 'text-red' }}">
+                    {{ s.score > -900 ? s.score|number_format(3) : '—' }}
+                </td>
+                <td>
+                    {% if ticker in signal.allocation|keys %}
+                        <span class="badge badge-green">{{ (signal.allocation[ticker] * 100)|round }}%</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{# === PORTEFEUILLES === #}
+<div class="grid grid-2">
+    {# IB Posities #}
+    <div class="card">
+        <h2>Interactive Brokers <span class="badge badge-blue">{{ ib_positions|length }} posities</span></h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Symbol</th>
+                    <th class="text-right">Aantal</th>
+                    <th class="text-right">Waarde</th>
+                    <th class="text-right">P/L</th>
+                    <th class="text-right">P/L %</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pos in ib_positions %}
+                <tr>
+                    <td class="mono">{{ pos.symbol }}</td>
+                    <td class="text-right mono">{{ pos.amount|number_format(0, ',', '.') }}</td>
+                    <td class="text-right mono">{{ pos.value|number_format(0, ',', '.') }}</td>
+                    <td class="text-right mono {{ pos.pnl >= 0 ? 'text-green' : 'text-red' }}">{{ pos.pnl|number_format(0, ',', '.') }}</td>
+                    <td class="text-right mono {{ pos.pnl_pct >= 0 ? 'text-green' : 'text-red' }}">{{ pos.pnl_pct }}%</td>
+                </tr>
+                {% endfor %}
+                <tr style="font-weight: 600;">
+                    <td>Totaal</td>
+                    <td></td>
+                    <td class="text-right mono">{{ ib_total_value|number_format(0, ',', '.') }}</td>
+                    <td class="text-right mono {{ (ib_total_value - ib_total_cost) >= 0 ? 'text-green' : 'text-red' }}">{{ (ib_total_value - ib_total_cost)|number_format(0, ',', '.') }}</td>
+                    <td class="text-right mono {{ (ib_total_value - ib_total_cost) >= 0 ? 'text-green' : 'text-red' }}">
+                        {% if ib_total_cost > 0 %}{{ (((ib_total_value - ib_total_cost) / ib_total_cost) * 100)|number_format(1) }}%{% endif %}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        {% if ib_cash.ending_cash is defined %}
+            <div style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--muted);">
+                Cash: {{ ib_cash.ending_cash|number_format(0, ',', '.') }} | Stortingen: {{ ib_cash.deposits|number_format(0, ',', '.') }}
+            </div>
+        {% endif %}
+    </div>
+
+    {# Saxo Posities #}
+    <div class="card">
+        <h2>Saxo Bank
+            {% if saxo_authenticated %}
+                <span class="badge badge-green">{{ saxo_positions|length }} posities</span>
+                <a href="{{ path('saxo_refresh') }}" class="btn btn-outline btn-sm" style="margin-left: auto;">Refresh Token</a>
+            {% endif %}
+        </h2>
+
+        {% if not saxo_authenticated %}
+            <div style="text-align: center; padding: 2rem;">
+                <p class="text-muted" style="margin-bottom: 1rem;">Log in bij Saxo om je posities te zien.</p>
+                <a href="{{ path('saxo_login') }}" class="btn btn-primary">Inloggen bij Saxo</a>
+            </div>
+        {% elseif saxo_positions is empty %}
+            <p class="text-muted">Geen openstaande posities.</p>
+        {% else %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Omschrijving</th>
+                        <th class="text-right">Aantal</th>
+                        <th class="text-right">Open</th>
+                        <th class="text-right">Huidig</th>
+                        <th class="text-right">P/L</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pos in saxo_positions %}
+                    <tr>
+                        <td class="mono">{{ pos.symbol }}</td>
+                        <td>{{ pos.description|length > 25 ? pos.description[:25] ~ '...' : pos.description }}</td>
+                        <td class="text-right mono">{{ pos.amount|number_format(0, ',', '.') }}</td>
+                        <td class="text-right mono">{{ pos.open_price|number_format(2, ',', '.') }}</td>
+                        <td class="text-right mono">{{ pos.current_price|number_format(2, ',', '.') }}</td>
+                        <td class="text-right mono {{ pos.pnl >= 0 ? 'text-green' : 'text-red' }}">{{ pos.pnl|number_format(0, ',', '.') }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr style="font-weight: 600;">
+                        <td colspan="5">Totaal P/L</td>
+                        <td class="text-right mono {{ saxo_total_pnl >= 0 ? 'text-green' : 'text-red' }}">{{ saxo_total_pnl|number_format(0, ',', '.') }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
