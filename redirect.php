@@ -1,8 +1,13 @@
 <?php
 
 // OAuth2 callback — wisselt authorization code om voor tokens
-$config = require __DIR__ . '/config.php';
-$saxo = $config['saxo'];
+// Credentials via environment variables (Coolify)
+$saxo = [
+    'app_key'        => getenv('SAXO_APP_KEY'),
+    'app_secret'     => getenv('SAXO_APP_SECRET'),
+    'redirect_uri'   => getenv('SAXO_REDIRECT_URI') ?: 'https://mido.barcelona2.doens.nl',
+    'token_endpoint' => 'https://live.logonvalidation.net/token',
+];
 
 if (!isset($_GET['code'])) {
     die('Geen authorization code ontvangen. Error: ' . ($_GET['error'] ?? 'onbekend'));
@@ -35,12 +40,12 @@ if ($httpCode !== 200 || !isset($tokens['access_token'])) {
     die("Token exchange mislukt (HTTP {$httpCode}): " . $response);
 }
 
-// Sla tokens op
-$tokenFile = __DIR__ . '/saxo_tokens.json';
-$tokens['created_at'] = time();
-file_put_contents($tokenFile, json_encode($tokens, JSON_PRETTY_PRINT));
-
+// Toon tokens op scherm (kopieer access_token naar config.php)
+header('Content-Type: text/html; charset=utf-8');
 echo "<h2>Saxo OAuth2 succesvol!</h2>";
-echo "<p>Access token opgeslagen in <code>saxo_tokens.json</code></p>";
-echo "<p>Token verloopt over {$tokens['expires_in']} seconden.</p>";
-echo "<p>Je kunt nu <code>php saxo_fetch.php</code> draaien.</p>";
+echo "<p><strong>Access Token</strong> (verloopt over {$tokens['expires_in']}s):</p>";
+echo "<textarea rows='6' cols='80' onclick='this.select()'>{$tokens['access_token']}</textarea>";
+if (isset($tokens['refresh_token'])) {
+    echo "<p><strong>Refresh Token:</strong></p>";
+    echo "<textarea rows='3' cols='80' onclick='this.select()'>{$tokens['refresh_token']}</textarea>";
+}
