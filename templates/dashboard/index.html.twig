@@ -23,11 +23,15 @@
     </div>
     <div class="card stat">
         <div class="stat-label">IB Portefeuille</div>
-        <div class="stat-value mono">{{ ib_total_value|number_format(0, ',', '.') }}</div>
+        <div class="stat-value mono">{{ (ib_total_value + ib_cash_balance)|number_format(0, ',', '.') }}</div>
+        <div class="text-muted" style="font-size: 0.75rem;">Cash: {{ ib_cash_balance|number_format(0, ',', '.') }}</div>
     </div>
     <div class="card stat">
         <div class="stat-label">Saxo Portefeuille</div>
-        <div class="stat-value mono">{{ saxo_total_exposure|number_format(0, ',', '.') }}</div>
+        <div class="stat-value mono">{{ (saxo_total_exposure + saxo_cash_balance)|number_format(0, ',', '.') }}</div>
+        {% if saxo_authenticated %}
+            <div class="text-muted" style="font-size: 0.75rem;">Cash: {{ saxo_cash_balance|number_format(0, ',', '.') }}</div>
+        {% endif %}
     </div>
     <div class="card stat">
         <div class="stat-label">Regime</div>
@@ -53,7 +57,7 @@
     </div>
 
     {# Allocatie balk #}
-    {% set colors = {'IWDA.AS': '#3b82f6', 'SXRG.AS': '#8b5cf6', 'IEMA.AS': '#f59e0b', 'IBCI.AS': '#06b6d4', 'SGLD.L': '#eab308', 'XEON.DE': '#6b7280'} %}
+    {% set colors = {'IWDA.AS': '#3b82f6', 'IUSN.DE': '#8b5cf6', 'IEMA.AS': '#f59e0b', 'IBCI.AS': '#06b6d4', 'SGLD.L': '#eab308', 'XEON.DE': '#6b7280'} %}
     <div class="alloc-bar">
         {% for ticker, weight in signal.allocation %}
             <div style="width: {{ (weight * 100)|round }}%; background: {{ colors[ticker] ?? '#6366f1' }};">
