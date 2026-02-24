@@ -18,15 +18,36 @@ class MomentumService
         'XEON.DE' => ['name' => '€STR Cash', 'role' => 'Cash equivalent', 'equity' => false, 'cash' => true],
     ];
 
+    private const CACHE_TTL = 3600;
+
+    private readonly string $cacheFile;
+
     public function __construct(
         private readonly HttpClientInterface $httpClient,
     ) {
+        $this->cacheFile = dirname(__DIR__, 2) . '/var/momentum_cache.json';
     }
 
     /**
      * @return array<string, mixed>
      */
     public function getSignal(): array
+    {
+        $cached = $this->loadCache();
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        $signal = $this->computeSignal();
+        $this->saveCache($signal);
+
+        return $signal;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function computeSignal(): array
     {
         $regime = $this->checkRegime();
         $scores = $this->calculateScores();
@@ -280,5 +301,39 @@ class MomentumService
         }
 
         return round($mean / $std, 3);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function loadCache(): ?array
+    {
+        if (!file_exists($this->cacheFile)) {
+            return null;
+        }
+
+        if ((time() - filemtime($this->cacheFile)) > self::CACHE_TTL) {
+            return null;
+        }
+
+        $content = file_get_contents($this->cacheFile);
+        if ($content === false) {
+            return null;
+        }
+
+        return json_decode($content, true);
+    }
+
+    /**
+     * @param array<string, mixed> $signal
+     */
+    private function saveCache(array $signal): void
+    {
+        $dir = dirname($this->cacheFile);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        file_put_contents($this->cacheFile, json_encode($signal));
     }
 }
