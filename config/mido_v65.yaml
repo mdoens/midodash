@@ -1,0 +1,104 @@
+mido:
+    strategy:
+        name: 'MIDO Holding Investment Strategy v6.5'
+        version: '6.5'
+
+    # v6.5 target allocations
+    targets:
+        NT World:     { target: 22, ticker: 'NTWCEAE.MFU', platform: Saxo, asset_class: equity, isin: 'NL0011225305' }
+        NT Europe:    { target: 3,  ticker: 'NTECNA.MFU',  platform: Saxo, asset_class: equity, isin: 'NL0010948220' }
+        AVWC:         { target: 20, ticker: 'AVWC',        platform: IBKR, asset_class: equity, isin: 'IE000OZUNBU0' }
+        AVWS:         { target: 8,  ticker: 'AVWS',        platform: IBKR, asset_class: equity, isin: 'IE000JS6TQ89' }
+        ZPRX:         { target: 4,  ticker: 'ZPRX',        platform: IBKR, asset_class: equity, isin: 'IE00BSPLC298' }
+        AVEM:         { target: 10, ticker: 'AVEM',        platform: IBKR, asset_class: equity, isin: 'IE000K975W13' }
+        XEON:         { target: 5,  ticker: 'XEON',        platform: IBKR, asset_class: fixed_income, isin: 'LU0290358497' }
+        IBGS:         { target: 6,  ticker: 'IBGS',        platform: IBKR, asset_class: fixed_income, isin: 'IE00B14X4Q57' }
+        ERNX:         { target: 6,  ticker: 'ERNX',        platform: IBKR, asset_class: fixed_income, isin: 'LU0484969463' }
+        IBGM:         { target: 6,  ticker: 'IBGM',        platform: IBKR, asset_class: fixed_income, isin: 'IE00B3VTML14' }
+        EGLN:         { target: 7,  ticker: 'EGLN',        platform: IBKR, asset_class: alternatives, isin: 'IE00B579F325' }
+        Crypto:       { target: 3,  ticker: 'BTC1+ETHWEUR+2SCS', platform: IBKR, asset_class: alternatives }
+
+    asset_classes:
+        equity:       { target: 67, label: Equity,       band_low: 62,  band_high: 72 }
+        fixed_income: { target: 23, label: Vastrentend,  band_low: 18,  band_high: 28 }
+        alternatives: { target: 10, label: Alternatives, band_low: 7.5, band_high: 12.5 }
+
+    geo_targets:
+        US: 43
+        Europa: 26
+        'Japan/Pacific': 7
+        EM: 16
+        Alternatives: 8
+
+    # Symbol mapping: IB/Saxo symbol -> v6.5 position name
+    symbol_map:
+        # IB symbols (verified from var/ib_statement.xml)
+        AVWC: AVWC
+        AVWS: AVWS
+        ZPRX: ZPRX
+        AVEM: AVEM
+        XEON: XEON
+        IBGS: IBGS
+        ERNX: ERNX
+        IBGM: IBGM
+        EGLN: EGLN
+        'BTC1': Crypto
+        'ETHWEUR': Crypto
+        '2SCS': Crypto
+        # IB positions not in v6.5 targets (tactical/momentum)
+        'IWMO': 'IWMO'
+        'QCEU': 'QCEU'
+        # Saxo symbols (NT funds via DisplayAndFormat.Symbol)
+        # NOTE: verify exact symbols after Saxo login on production
+        'NtWCeae:xmfu': 'NT World'
+        'NtECnA:xmfu': 'NT Europe'
+        'NtEMesA:xmfu': 'NT Europe'
+
+    factors:
+        - { factor: Beta,     score: 0.56 }
+        - { factor: Value,    score: 0.33 }
+        - { factor: Momentum, score: 0.22 }
+        - { factor: Size,     score: 0.26 }
+        - { factor: Quality,  score: 0.28 }
+
+    factor_mapping:
+        - { position: 'NT World (22%)',  factors: [Beta],                  description: 'Marktgewogen kern, FGR-voordeel' }
+        - { position: 'AVWC (20%)',      factors: [Value, Quality, Momentum], description: 'Multi-factor met momentum' }
+        - { position: 'AVWS (8%)',       factors: [Value, Size, Momentum],    description: 'Small cap value met profitability' }
+        - { position: 'ZPRX (4%)',       factors: [Value, Size],              description: 'EU Small Cap Value' }
+        - { position: 'AVEM (10%)',      factors: [Value, Quality],           description: 'EM met cash-based fraud filter' }
+
+    crisis:
+        price_trigger: -30
+        vix_trigger: 35
+        vix_sustained_days: 5
+        credit_trigger: 500
+
+    deployment:
+        - { level: 1, condition: '1/3 signalen + DD>15%', amount: 35000, source: XEON }
+        - { level: 2, condition: '2/3 signalen',          amount: 70000, source: 'XEON + IBGS' }
+        - { level: 3, condition: '+30d: nog 2/3',         amount: 70000, source: 'IBGS + ERNX' }
+        - { level: 4, condition: '3/3 (systeem)',          amount: 0,     source: 'IBGM + rest' }
+
+    reference:
+        ecb_deposit: 3.00
+        eur_usd: 1.15
+        gold_ath: 2790
+
+    triggers:
+        T1: { vix_threshold: 35, drawdown_threshold: -15 }
+        T3: { inflation_threshold: 4.0, gdp_growth_threshold: 1.0 }
+        T5: { hy_spread_threshold: 6.0, ig_spread_threshold: 2.5 }
+        T9: { curve_inversion_months: 6 }
+
+    warnings:
+        cape_threshold: 35
+        erp_threshold: 1.0
+        eur_usd_deviation: 10
+
+    five_questions:
+        - 'Heb ik dit geld de komende 5 jaar nodig? -> NEE'
+        - 'Is de strategie veranderd? -> NEE'
+        - 'Zijn de bedrijven in mijn ETFs failliet? -> NEE'
+        - 'Verkoop ik uit angst of uit ratio? -> ANGST = stop'
+        - 'Wat zou Warren Buffett doen? -> Bijkopen'

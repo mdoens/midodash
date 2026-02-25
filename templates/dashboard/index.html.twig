@@ -1,221 +1,592 @@
 {% extends 'base.html.twig' %}
 
+{# ── Twig macros ── #}
+{% macro fmt(n) %}{{ n|number_format(0, ',', '.') }}{% endmacro %}
+{% macro fmtPct(n) %}{{ n >= 0 ? '+' : '' }}{{ n|number_format(1) }}%{% endmacro %}
+{% macro fmtEur(n) %}€{{ n|number_format(0, ',', '.') }}{% endmacro %}
+
+{% macro miniBar(value, max, color) %}
+{% set pct = ((value|abs) / max * 100)|round %}
+{% if pct > 100 %}{% set pct = 100 %}{% endif %}
+<div class="mini-bar">
+    <div class="mini-bar__fill" style="width: {{ pct }}%; background: {{ color }};"></div>
+</div>
+{% endmacro %}
+
+{% macro miniBarBand(value, max, color, bandLow, bandHigh) %}
+{% set pct = ((value|abs) / max * 100)|round %}
+{% if pct > 100 %}{% set pct = 100 %}{% endif %}
+<div class="mini-bar">
+    <div class="mini-bar__band" style="left: {{ (bandLow / max * 100)|round }}%; width: {{ ((bandHigh - bandLow) / max * 100)|round }}%;"></div>
+    <div class="mini-bar__fill" style="width: {{ pct }}%; background: {{ color }};"></div>
+</div>
+{% endmacro %}
+
+{% macro signalDot(status) %}
+{% if status == 'red' %}<span class="dot dot--red"></span>
+{% elseif status == 'yellow' %}<span class="dot dot--yellow"></span>
+{% elseif status == 'green' %}<span class="dot dot--green"></span>
+{% else %}<span class="dot dot--gray"></span>{% endif %}
+{% endmacro %}
+
+{% macro statusBadge(status) %}
+{% if status == 'OK' %}<span class="badge badge--green">OK</span>
+{% elseif status == 'MONITOR' %}<span class="badge badge--yellow">MONITOR</span>
+{% elseif status == 'REBAL' %}<span class="badge badge--red">REBAL</span>
+{% elseif status == 'ONTBREEKT' %}<span class="badge badge--red">ONTBREEKT</span>
+{% endif %}
+{% endmacro %}
+
 {% block body %}
-{% for message in app.flashes('error') %}
-    <div class="alert alert-error" style="background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
-        {{ message }}
-    </div>
-{% endfor %}
-{% for message in app.flashes('success') %}
-    <div class="alert alert-success" style="background: #f0fdf4; border: 1px solid #86efac; color: #166534; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
-        {{ message }}
-    </div>
-{% endfor %}
-{% if ib_error %}
-    <div class="alert alert-warning" style="background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
-        Interactive Brokers data is momenteel niet beschikbaar.
-    </div>
-{% endif %}
-{% if saxo_error %}
-    <div class="alert alert-warning" style="background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
-        Saxo Bank data kon niet worden opgehaald.
-    </div>
-{% endif %}
-{% if momentum_error %}
-    <div class="alert alert-warning" style="background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
-        Momentum signaal kon niet worden berekend.
-    </div>
-{% endif %}
-<header>
-    <div>
-        <h1>MIDO Dashboard</h1>
-        <div class="subtitle">Tactische Sleeve Strategie — {{ "now"|date("d M Y H:i") }}</div>
-    </div>
-    <div>
-        {% if saxo_authenticated %}
-            <span class="badge badge-green">Saxo verbonden</span>
-        {% else %}
-            <a href="{{ path('saxo_login') }}" class="btn btn-primary btn-sm">Saxo Inloggen</a>
-        {% endif %}
-    </div>
-</header>
+{# ── Alerts ── #}
+{% if ib_error %}<div class="alert alert--warning">Interactive Brokers data is momenteel niet beschikbaar.</div>{% endif %}
+{% if saxo_error %}<div class="alert alert--warning">Saxo Bank data kon niet worden opgehaald.</div>{% endif %}
+{% if macro_error %}<div class="alert alert--warning">Macro indicatoren konden niet worden geladen.</div>{% endif %}
 
-{# === TOTAAL OVERZICHT === #}
-<div class="grid grid-4" style="margin-bottom: 1.5rem;">
-    <div class="card stat">
-        <div class="stat-label">Totaal Vermogen</div>
-        <div class="stat-value mono">{{ grand_total|number_format(0, ',', '.') }}</div>
-    </div>
-    <div class="card stat">
-        <div class="stat-label">IB Portefeuille</div>
-        <div class="stat-value mono">{{ (ib_total_value + ib_cash_balance)|number_format(0, ',', '.') }}</div>
-        <div class="text-muted" style="font-size: 0.75rem;">Cash: {{ ib_cash_balance|number_format(0, ',', '.') }}</div>
-    </div>
-    <div class="card stat">
-        <div class="stat-label">Saxo Portefeuille</div>
-        <div class="stat-value mono">{{ (saxo_total_exposure + saxo_cash_balance)|number_format(0, ',', '.') }}</div>
-        {% if saxo_authenticated %}
-            <div class="text-muted" style="font-size: 0.75rem;">Cash: {{ saxo_cash_balance|number_format(0, ',', '.') }}</div>
-        {% endif %}
-    </div>
-    <div class="card stat">
-        <div class="stat-label">Regime</div>
-        <div class="stat-value">
-            {% if signal.regime.bull %}
-                <span class="text-green">BULL</span>
+{# ── Set crisis signal colors ── #}
+{% set dd = crisis.drawdown.drawdown_pct ?? 0 %}
+{% set vixVal = macro.vix ?? 0 %}
+{% set hyBps = macro.hy_spread_bps ?? 0 %}
+{% set priceColor = dd <= -20 ? 'red' : (dd <= -10 ? 'yellow' : 'green') %}
+{% set vixColor = vixVal >= 30 ? 'red' : (vixVal >= 20 ? 'yellow' : 'green') %}
+{% set creditColor = hyBps >= 500 ? 'red' : (hyBps >= 400 ? 'yellow' : 'green') %}
+{% set crisisCount = crisis.active_signals ?? 0 %}
+
+{# ── HEADER ── #}
+<div class="header">
+    <div>
+        <div class="flex items-center gap-12">
+            <h1 class="header__title">MIDO Command Center</h1>
+            {% if crisisCount == 0 %}
+                <span class="badge badge--green">GEEN ACTIE</span>
+            {% elseif crisisCount == 1 %}
+                <span class="badge badge--yellow">NIVEAU 1</span>
             {% else %}
-                <span class="text-red">BEAR</span>
+                <span class="badge badge--red">NIVEAU {{ crisisCount >= 3 ? 4 : crisisCount }}</span>
             {% endif %}
         </div>
+        <p class="header__sub">Strategie v6.5 — {{ "now"|date("d M Y H:i") }}</p>
     </div>
-</div>
-
-{# === MOMENTUM SIGNAAL === #}
-<div class="card" style="margin-bottom: 1.5rem;">
-    <h2>Momentum Signaal <span class="badge {{ signal.regime.bull ? 'badge-green' : 'badge-red' }}">{{ signal.regime.bull ? 'Bull' : 'Bear' }} Regime</span></h2>
-
-    <div class="signal-box {{ signal.regime.bull ? 'signal-bull' : 'signal-bear' }}" style="margin-bottom: 1rem;">
-        <strong>{{ signal.reason }}</strong>
-        <div class="text-muted" style="font-size: 0.8rem; margin-top: 0.25rem;">
-            IWDA: {{ signal.regime.price }} | MA200: {{ signal.regime.ma200 }}
-        </div>
-    </div>
-
-    {# Allocatie balk #}
-    {% set colors = {'IWDA.AS': '#3b82f6', 'AVWC.DE': '#6366f1', 'AVWS.DE': '#8b5cf6', 'ZPRX.DE': '#a855f7', 'VEUR.AS': '#2563eb', 'IEMA.AS': '#f59e0b', 'AVEM.DE': '#f97316', 'IBCI.AS': '#06b6d4', 'SGLD.L': '#eab308', 'XEON.DE': '#6b7280'} %}
-    <div class="alloc-bar">
-        {% for ticker, weight in signal.allocation %}
-            <div style="width: {{ (weight * 100)|round }}%; background: {{ colors[ticker] ?? '#6366f1' }};">
-                {{ ticker|split('.')[0] }} {{ (weight * 100)|round }}%
-            </div>
-        {% endfor %}
-    </div>
-
-    {# Scores tabel #}
-    <table>
-        <thead>
-            <tr>
-                <th>ETF</th>
-                <th>Naam</th>
-                <th>Rol</th>
-                <th class="text-right">Prijs</th>
-                <th class="text-right">Score</th>
-                <th>Signaal</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for ticker, s in signal.scores %}
-            <tr>
-                <td class="mono">{{ ticker }}</td>
-                <td>{{ s.name }}</td>
-                <td class="text-muted">{{ s.role }}</td>
-                <td class="text-right mono">{{ s.last_price|number_format(2, ',', '.') }}</td>
-                <td class="text-right mono {{ s.score > 0 ? 'text-green' : 'text-red' }}">
-                    {{ s.score > -900 ? s.score|number_format(3) : '—' }}
-                </td>
-                <td>
-                    {% if ticker in signal.allocation|keys %}
-                        <span class="badge badge-green">{{ (signal.allocation[ticker] * 100)|round }}%</span>
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-
-{# === PORTEFEUILLES === #}
-<div class="grid grid-2">
-    {# IB Posities #}
-    <div class="card">
-        <h2>Interactive Brokers <span class="badge badge-blue">{{ ib_positions|length }} posities</span></h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Symbol</th>
-                    <th class="text-right">Aantal</th>
-                    <th class="text-right">Waarde</th>
-                    <th class="text-right">P/L</th>
-                    <th class="text-right">P/L %</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for pos in ib_positions %}
-                <tr>
-                    <td class="mono">{{ pos.symbol }}</td>
-                    <td class="text-right mono">{{ pos.amount|number_format(0, ',', '.') }}</td>
-                    <td class="text-right mono">{{ pos.value|number_format(0, ',', '.') }}</td>
-                    <td class="text-right mono {{ pos.pnl >= 0 ? 'text-green' : 'text-red' }}">{{ pos.pnl|number_format(0, ',', '.') }}</td>
-                    <td class="text-right mono {{ pos.pnl_pct >= 0 ? 'text-green' : 'text-red' }}">{{ pos.pnl_pct }}%</td>
-                </tr>
-                {% endfor %}
-                <tr style="font-weight: 600;">
-                    <td>Totaal</td>
-                    <td></td>
-                    <td class="text-right mono">{{ ib_total_value|number_format(0, ',', '.') }}</td>
-                    <td class="text-right mono {{ (ib_total_value - ib_total_cost) >= 0 ? 'text-green' : 'text-red' }}">{{ (ib_total_value - ib_total_cost)|number_format(0, ',', '.') }}</td>
-                    <td class="text-right mono {{ (ib_total_value - ib_total_cost) >= 0 ? 'text-green' : 'text-red' }}">
-                        {% if ib_total_cost > 0 %}{{ (((ib_total_value - ib_total_cost) / ib_total_cost) * 100)|number_format(1) }}%{% endif %}
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-        {% if ib_cash.ending_cash is defined %}
-            <div style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--muted);">
-                Cash: {{ ib_cash.ending_cash|number_format(0, ',', '.') }} | Stortingen: {{ ib_cash.deposits|number_format(0, ',', '.') }}
-            </div>
-        {% endif %}
-    </div>
-
-    {# Saxo Posities #}
-    <div class="card">
-        <h2>Saxo Bank
-            {% if saxo_authenticated %}
-                <span class="badge badge-green">{{ saxo_positions|length }} posities</span>
-                <a href="{{ path('saxo_refresh') }}" class="btn btn-outline btn-sm" style="margin-left: auto;">Refresh Token</a>
-            {% endif %}
-        </h2>
-
+    <div class="flex gap-8 items-center">
         {% if not saxo_authenticated %}
-            <div style="text-align: center; padding: 2rem;">
-                <p class="text-muted" style="margin-bottom: 1rem;">Log in bij Saxo om je posities te zien.</p>
-                <a href="{{ path('saxo_login') }}" class="btn btn-primary">Inloggen bij Saxo</a>
-            </div>
-        {% elseif saxo_positions is empty %}
-            <p class="text-muted">Geen openstaande posities.</p>
+            <a href="{{ path('saxo_login') }}" class="btn btn--primary">Saxo Inloggen</a>
         {% else %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Symbol</th>
-                        <th class="text-right">Aantal</th>
-                        <th class="text-right">Waarde</th>
-                        <th class="text-right">P/L</th>
-                        <th class="text-right">P/L %</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for pos in saxo_positions %}
-                    {% set value = pos.amount * pos.current_price %}
-                    {% set pnl_pct = pos.open_price > 0 ? ((pos.current_price - pos.open_price) / pos.open_price) * 100 : 0 %}
-                    <tr>
-                        <td class="mono">{{ pos.symbol }}</td>
-                        <td class="text-right mono">{{ pos.amount|number_format(0, ',', '.') }}</td>
-                        <td class="text-right mono">{{ value|number_format(0, ',', '.') }}</td>
-                        <td class="text-right mono {{ pos.pnl >= 0 ? 'text-green' : 'text-red' }}">{{ pos.pnl|number_format(0, ',', '.') }}</td>
-                        <td class="text-right mono {{ pnl_pct >= 0 ? 'text-green' : 'text-red' }}">{{ pnl_pct|number_format(1) }}%</td>
-                    </tr>
-                    {% endfor %}
-                    <tr style="font-weight: 600;">
-                        <td>Totaal</td>
-                        <td></td>
-                        <td class="text-right mono">{{ saxo_total_exposure|number_format(0, ',', '.') }}</td>
-                        <td class="text-right mono {{ saxo_total_pnl >= 0 ? 'text-green' : 'text-red' }}">{{ saxo_total_pnl|number_format(0, ',', '.') }}</td>
-                        <td></td>
-                    </tr>
-                </tbody>
-            </table>
+            <span class="badge badge--green">Saxo verbonden</span>
         {% endif %}
+    </div>
+</div>
+
+{# ── TAB NAV ── #}
+<div data-controller="tabs">
+    <div class="tabs">
+        <button class="tab active" data-tabs-target="tab" data-tab="overview" data-action="click->tabs#switch">Overzicht</button>
+        <button class="tab" data-tabs-target="tab" data-tab="positions" data-action="click->tabs#switch">Posities</button>
+        <button class="tab" data-tabs-target="tab" data-tab="crisis" data-action="click->tabs#switch">Crisis</button>
+        <button class="tab" data-tabs-target="tab" data-tab="factors" data-action="click->tabs#switch">Factoren</button>
+        <button class="tab" data-tabs-target="tab" data-tab="momentum" data-action="click->tabs#switch">Momentum</button>
+    </div>
+
+    {# ── TOP METRICS ROW ── #}
+    <div class="grid grid--5 mb-20">
+        <div class="glass stat">
+            <div class="stat__label">Totaal Vermogen</div>
+            <div class="stat__value mono">{{ _self.fmtEur(allocation.total_portfolio) }}</div>
+            <div class="stat__sub">P/L: {{ _self.fmtPct((allocation.total_pl / (allocation.total_portfolio - allocation.total_pl)) * 100) }}</div>
+        </div>
+        {% set eq = allocation.asset_classes.equity ?? {} %}
+        <div class="glass stat">
+            <div class="stat__label">Equity</div>
+            <div class="stat__value {{ eq.in_band ?? true ? 'text-green' : 'text-yellow' }}">{{ (eq.current_pct ?? 0)|number_format(1) }}%</div>
+            <div class="stat__sub {{ eq.in_band ?? true ? 'text-green' : 'text-yellow' }}">Target: 67% | {{ eq.in_band ?? true ? '✓ In band' : '⚠ Buiten band' }}</div>
+        </div>
+        {% set fi = allocation.asset_classes.fixed_income ?? {} %}
+        <div class="glass stat">
+            <div class="stat__label">Vastrentend</div>
+            <div class="stat__value {{ fi.in_band ?? true ? 'text-green' : 'text-yellow' }}">{{ (fi.current_pct ?? 0)|number_format(1) }}%</div>
+            <div class="stat__sub {{ fi.in_band ?? true ? 'text-green' : 'text-yellow' }}">Target: 23% | {{ fi.in_band ?? true ? '✓ In band' : '⚠ Buiten band' }}</div>
+        </div>
+        <div class="glass stat">
+            <div class="stat__label">Dry Powder</div>
+            <div class="stat__value mono">{{ _self.fmtEur(allocation.dry_powder) }}</div>
+            <div class="stat__sub">Crisis Niv.1: {{ _self.fmtEur(35000) }}</div>
+        </div>
+        <div class="glass stat">
+            <div class="stat__label">Regime</div>
+            <div class="stat__value text-green">{{ regime }}</div>
+            <div class="stat__sub">VIX: {{ (macro.vix ?? 0)|number_format(1) }} | CAPE: {{ (macro.cape ?? 0)|number_format(0) }}</div>
+        </div>
+    </div>
+
+    {# ════════════════════════════════════════════════════════════════
+       TAB: OVERZICHT
+       ════════════════════════════════════════════════════════════════ #}
+    <div class="tab-panel active" data-tabs-target="panel" data-panel="overview">
+        <div class="grid grid--2">
+            {# ── Asset Class vs Target ── #}
+            <div class="glass">
+                <div class="section-label"><span class="section-label__text">Asset Class vs Target</span></div>
+                <div class="flex gap-20">
+                    <div class="chart-wrap chart-wrap--pie">
+                        {{ render_chart(pie_chart) }}
+                    </div>
+                    <div class="flex-1">
+                        {% set acColors = { equity: '#22c55e', fixed_income: '#3b82f6', alternatives: '#f59e0b' } %}
+                        {% for key, ac in allocation.asset_classes %}
+                        <div class="mb-14">
+                            <div class="flex-between" style="font-size: 12px; margin-bottom: 4px;">
+                                <span style="color: {{ acColors[key] }};" class="fw-600">{{ ac.label }}</span>
+                                <span>
+                                    <span class="text-dim fw-700">{{ ac.current_pct|number_format(1) }}%</span>
+                                    <span class="text-muted"> / {{ ac.target }}%</span>
+                                    <span style="margin-left: 6px; font-size: 11px;" class="{{ ac.in_band ? 'text-green' : 'text-yellow' }}">
+                                        {{ ac.drift >= 0 ? '+' : '' }}{{ ac.drift|number_format(1) }}pp
+                                    </span>
+                                </span>
+                            </div>
+                            {{ _self.miniBarBand(ac.current_pct, 100, acColors[key], ac.band_low, ac.band_high) }}
+                        </div>
+                        {% endfor %}
+                        <div>
+                            <div class="flex-between" style="font-size: 12px; margin-bottom: 4px;">
+                                <span style="color: #475569;" class="fw-600">Cash (niet belegd)</span>
+                                <span class="text-dim fw-700">{{ allocation.cash_pct|number_format(1) }}%</span>
+                            </div>
+                            {{ _self.miniBar(allocation.cash_pct, 100, '#475569') }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# ── Crisis Protocol ── #}
+            <div class="glass {{ crisisCount > 0 ? 'glass--red' : 'glass--green' }}">
+                <div class="section-label"><span class="section-label__text">Crisis Protocol v6.5</span></div>
+                <div class="grid grid--3 mb-16">
+                    {% set signals = [
+                        { label: 'PRIJS', sub: 'IWDA ' ~ (dd|number_format(1)) ~ '%', trigger: '< -20%', color: priceColor },
+                        { label: 'VIX', sub: (vixVal|number_format(1)), trigger: '> 30 (3d)', color: vixColor },
+                        { label: 'CREDIT', sub: 'HY ' ~ hyBps ~ 'bps', trigger: '> 500bps', color: creditColor },
+                    ] %}
+                    {% for s in signals %}
+                    <div class="signal-card signal-card--{{ s.color }}">
+                        {{ _self.signalDot(s.color) }}
+                        <div style="font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: var(--text-label); margin-top: 6px;">{{ s.label }}</div>
+                        <div style="font-size: 18px; font-weight: 800; margin-top: 2px;">{{ s.sub }}</div>
+                        <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">Trigger: {{ s.trigger }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="inner-panel">
+                    <div style="font-size: 11px; font-weight: 700; color: var(--text-label); margin-bottom: 8px; letter-spacing: 1px;">DEPLOYMENT PROTOCOL</div>
+                    {% for dp in deployment_protocol %}
+                    <div class="deploy-step {{ crisisCount >= dp.level ? 'deploy-step--active' : 'deploy-step--inactive' }}">
+                        <span class="deploy-step__num">{{ dp.level }}</span>
+                        <span style="font-size: 11px; color: var(--text-label); flex: 1;">{{ dp.condition }}</span>
+                        <span style="font-size: 11px; font-weight: 700; color: {{ crisisCount >= dp.level ? 'var(--red)' : 'var(--text-muted)' }};">
+                            {{ dp.amount > 0 ? _self.fmtEur(dp.amount) : 'Restant' }}
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            {# ── Macro Indicatoren ── #}
+            <div class="glass">
+                <div class="section-label"><span class="section-label__text">Macro Indicatoren</span></div>
+                <div class="grid grid--2" style="gap: 10px;">
+                    {% set macroItems = [
+                        { label: 'ECB Rente', value: macro.ecb_rate is not null ? macro.ecb_rate|number_format(2) ~ '%' : '...', color: '#3b82f6' },
+                        { label: 'EU Inflatie', value: macro.eu_inflation is not null ? macro.eu_inflation|number_format(1) ~ '%' : '...', color: '#f59e0b' },
+                        { label: 'CAPE S&P', value: macro.cape is not null ? macro.cape|number_format(0) ~ 'x' : '...', color: (macro.cape ?? 0) > 35 ? '#ef4444' : '#22c55e' },
+                        { label: 'Goud USD', value: macro.gold is not null ? '$' ~ macro.gold|number_format(0) : '...', color: '#f59e0b' },
+                        { label: 'EUR/USD', value: macro.eurusd is not null ? macro.eurusd|number_format(3) : '...', color: '#8b5cf6' },
+                        { label: 'US 10Y', value: macro.dgs10 is not null ? macro.dgs10|number_format(2) ~ '%' : '...', color: '#06b6d4' },
+                    ] %}
+                    {% for m in macroItems %}
+                    <div class="inner-panel">
+                        <div style="font-size: 10px; color: var(--text-muted); font-weight: 600; letter-spacing: 1px;">{{ m.label }}</div>
+                        <div style="font-size: 20px; font-weight: 800; color: {{ m.color }}; margin-top: 2px;" class="mono">{{ m.value }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            {# ── Herbalancering 5/25 Regel ── #}
+            {% set rebalCount = allocation.rebal_needed|length %}
+            <div class="glass {{ rebalCount > 0 ? 'glass--yellow' : 'glass--green' }}">
+                <div class="section-label"><span class="section-label__text">Herbalancering 5/25 Regel</span></div>
+                {% if rebalCount == 0 %}
+                <div style="text-align: center; padding: 20px;">
+                    <div style="font-size: 32px; margin-bottom: 8px;">✓</div>
+                    <div style="font-size: 14px; font-weight: 600;" class="text-green">Geen herbalancering nodig</div>
+                    <div style="font-size: 12px; margin-top: 4px;" class="text-muted">Alle posities binnen 5pp absoluut / 25% relatief band</div>
+                </div>
+                {% else %}
+                <div style="font-size: 13px; font-weight: 600; margin-bottom: 12px;" class="text-yellow">
+                    ⚠ {{ rebalCount }} positie(s) buiten band
+                </div>
+                {% for name, p in allocation.rebal_needed %}
+                <div class="flex-between" style="padding: 8px 0; border-bottom: 1px solid rgba(148,163,184,0.08);">
+                    <span style="font-size: 13px;" class="fw-600">{{ name }}</span>
+                    <span style="font-size: 12px;">
+                        <span class="text-dim">{{ p.current_pct|number_format(1) }}%</span>
+                        <span class="text-muted"> / {{ p.target }}%</span>
+                        <span class="text-yellow fw-700" style="margin-left: 8px;">{{ _self.fmtPct(p.drift) }}pp</span>
+                    </span>
+                </div>
+                {% endfor %}
+                {% endif %}
+
+                <div class="mt-16">
+                    <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 1.5px; margin-bottom: 8px;">GROOTSTE DRIFTS</div>
+                    {% for name, p in positions_by_drift %}
+                    <div class="flex items-center gap-8" style="padding: 4px 0;">
+                        <span style="font-size: 12px; flex: 1;" class="text-label fw-500">{{ name }}</span>
+                        <span style="font-size: 11px;" class="text-muted">{{ p.current_pct|number_format(1) }}%</span>
+                        <span style="font-size: 11px;" class="text-muted">→ {{ p.target }}%</span>
+                        {% set absDrift = p.drift|abs %}
+                        <span style="font-size: 11px; width: 55px; text-align: right;" class="fw-700 {{ absDrift >= 5 ? 'text-red' : (absDrift >= 3 ? 'text-yellow' : 'text-green') }}">
+                            {{ p.drift >= 0 ? '+' : '' }}{{ p.drift|number_format(1) }}pp
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# ════════════════════════════════════════════════════════════════
+       TAB: POSITIES
+       ════════════════════════════════════════════════════════════════ #}
+    <div class="tab-panel" data-tabs-target="panel" data-panel="positions">
+        <div class="glass mb-16">
+            <div class="section-label"><span class="section-label__text">Alle Posities vs v6.5 Targets</span></div>
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Positie</th>
+                            <th>Platform</th>
+                            <th class="text-right">Waarde</th>
+                            <th class="text-right">Huidig %</th>
+                            <th class="text-right">Target %</th>
+                            <th class="text-right">Drift</th>
+                            <th class="text-right">P/L</th>
+                            <th class="text-right">P/L %</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for name, p in allocation.positions %}
+                        <tr style="{{ p.status == 'ONTBREEKT' ? 'opacity: 0.5;' : '' }}">
+                            <td class="fw-600">
+                                <span class="ac-dot ac-dot--{{ p.asset_class }}"></span>{{ name }}
+                            </td>
+                            <td>
+                                <span class="badge {{ p.platform == 'Saxo' ? 'badge--purple' : 'badge--blue' }}">{{ p.platform }}</span>
+                            </td>
+                            <td class="text-right fw-600 mono">{{ _self.fmtEur(p.value) }}</td>
+                            <td class="text-right fw-700 mono">{{ p.current_pct|number_format(1) }}%</td>
+                            <td class="text-right text-muted">{{ p.target }}%</td>
+                            {% set driftColor = p.drift|abs >= 5 ? 'text-red' : (p.drift|abs >= 3 ? 'text-yellow' : 'text-green') %}
+                            <td class="text-right fw-700 {{ driftColor }}">{{ p.drift >= 0 ? '+' : '' }}{{ p.drift|number_format(1) }}pp</td>
+                            {% set plColor = p.pl >= 0 ? 'text-green' : 'text-red' %}
+                            <td class="text-right {{ plColor }} fw-600 mono">{{ p.pl >= 0 ? '+' : '' }}{{ _self.fmtEur(p.pl) }}</td>
+                            <td class="text-right {{ plColor }} fw-600 mono">{{ _self.fmtPct(p.pl_pct) }}</td>
+                            <td>{{ _self.statusBadge(p.status) }}</td>
+                        </tr>
+                        {% endfor %}
+                        {# Cash row #}
+                        <tr style="border-top: 2px solid rgba(148,163,184,0.15);">
+                            <td class="fw-600 text-muted">Cash (niet belegd)</td>
+                            <td><span class="text-muted" style="font-size: 10px;">IB+Saxo</span></td>
+                            <td class="text-right fw-600 mono">{{ _self.fmtEur(allocation.total_cash) }}</td>
+                            <td class="text-right fw-700 mono">{{ allocation.cash_pct|number_format(1) }}%</td>
+                            <td colspan="5" class="text-muted" style="font-size: 11px;">
+                                IB: {{ _self.fmtEur(allocation.ib_cash) }} | Saxo: {{ _self.fmtEur(allocation.saxo_cash) }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="grid grid--2">
+            {# Platform Verdeling #}
+            <div class="glass">
+                <div class="section-label"><span class="section-label__text">Platform Verdeling</span></div>
+                {% set ibPct = allocation.total_portfolio > 0 ? (allocation.platform_split.ibkr / allocation.total_portfolio * 100) : 0 %}
+                {% set saxoPct = allocation.total_portfolio > 0 ? (allocation.platform_split.saxo / allocation.total_portfolio * 100) : 0 %}
+                <div class="mb-14">
+                    <div class="flex-between" style="font-size: 12px; margin-bottom: 4px;">
+                        <span class="text-blue fw-600">Interactive Brokers</span>
+                        <span><span class="fw-700">{{ _self.fmtEur(allocation.platform_split.ibkr) }}</span> <span class="text-muted">({{ ibPct|number_format(0) }}%)</span></span>
+                    </div>
+                    {{ _self.miniBar(ibPct, 100, '#3b82f6') }}
+                </div>
+                <div>
+                    <div class="flex-between" style="font-size: 12px; margin-bottom: 4px;">
+                        <span class="text-purple fw-600">Saxo Bank</span>
+                        <span><span class="fw-700">{{ _self.fmtEur(allocation.platform_split.saxo) }}</span> <span class="text-muted">({{ saxoPct|number_format(0) }}%)</span></span>
+                    </div>
+                    {{ _self.miniBar(saxoPct, 100, '#8b5cf6') }}
+                </div>
+            </div>
+
+            {# Geografische Verdeling (geschat) #}
+            <div class="glass">
+                <div class="section-label"><span class="section-label__text">Geografische Verdeling (geschat)</span></div>
+                {% set geoColors = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6'] %}
+                {% set geoEstimates = { US: 38, Europa: 28, 'Japan/Pacific': 5, EM: 12, Alternatives: 12 } %}
+                {% set geoTargets = { US: 43, Europa: 26, 'Japan/Pacific': 7, EM: 16, Alternatives: 8 } %}
+                {% set i = 0 %}
+                {% for geo, target in geoTargets %}
+                    {% set current = geoEstimates[geo] ?? 0 %}
+                    {% set drift = current - target %}
+                    <div class="flex items-center gap-10" style="padding: 6px 0;">
+                        <span style="font-size: 12px; width: 90px;" class="text-label fw-500">{{ geo }}</span>
+                        <div class="flex-1">{{ _self.miniBar(current, 70, geoColors[i]) }}</div>
+                        <span style="font-size: 12px; width: 35px; text-align: right;" class="fw-700">{{ current }}%</span>
+                        <span style="font-size: 11px; width: 30px; text-align: right;" class="text-muted">{{ target }}%</span>
+                        <span style="font-size: 11px; width: 40px; text-align: right;" class="fw-600 {{ drift|abs > 5 ? 'text-yellow' : 'text-muted' }}">
+                            {{ drift >= 0 ? '+' : '' }}{{ drift }}pp
+                        </span>
+                    </div>
+                    {% set i = i + 1 %}
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    {# ════════════════════════════════════════════════════════════════
+       TAB: CRISIS
+       ════════════════════════════════════════════════════════════════ #}
+    <div class="tab-panel" data-tabs-target="panel" data-panel="crisis">
+        <div class="grid grid--2">
+            {# Drawdown Monitor (full width) #}
+            <div class="glass grid--full">
+                <div class="section-label"><span class="section-label__text">Crisis Drawdown Monitor</span></div>
+                <div class="grid grid--4">
+                    <div class="inner-panel--big">
+                        <div class="stat__label">IWDA vs 52W High</div>
+                        <div style="font-size: 36px; font-weight: 800; margin-top: 8px;">{{ (dd)|number_format(1) }}%</div>
+                        <div style="font-size: 11px; margin-top: 4px;" class="text-muted">Trigger: &lt; -20%</div>
+                    </div>
+                    <div class="inner-panel--big">
+                        <div class="stat__label">VIX Niveau</div>
+                        <div style="font-size: 36px; font-weight: 800; margin-top: 8px;">{{ vixVal|number_format(1) }}</div>
+                        <div style="font-size: 11px; margin-top: 4px;" class="text-muted">Trigger: &gt; 30</div>
+                    </div>
+                    <div class="inner-panel--big">
+                        <div class="stat__label">HY Spread</div>
+                        <div style="font-size: 36px; font-weight: 800; margin-top: 8px;">{{ hyBps }}bps</div>
+                        <div style="font-size: 11px; margin-top: 4px;" class="text-muted">Trigger: &gt; 500bps</div>
+                    </div>
+                    <div class="inner-panel--big" style="{{ crisisCount > 0 ? 'border-color: rgba(239,68,68,0.3);' : '' }}">
+                        <div class="stat__label">Actieve Signalen</div>
+                        <div style="font-size: 36px; font-weight: 800; margin-top: 8px;" class="{{ crisisCount == 0 ? 'text-green' : 'text-red' }}">{{ crisisCount }}/3</div>
+                    </div>
+                </div>
+            </div>
+
+            {# Dry Powder Inventaris #}
+            <div class="glass">
+                <div class="section-label"><span class="section-label__text">Dry Powder Inventaris</span></div>
+                <div class="mb-20">
+                    <div style="font-size: 28px; font-weight: 800;">{{ _self.fmtEur(allocation.dry_powder) }}</div>
+                    <div style="font-size: 12px; margin-top: 4px;" class="text-muted">Beschikbaar voor crisis deployment</div>
+                </div>
+                {% set dpItems = [
+                    { label: 'XEON (puur dry powder)', value: allocation.positions.XEON.value ?? 0, color: '#3b82f6' },
+                    { label: 'IBGS (flight-to-safety)', value: allocation.positions.IBGS.value ?? 0, color: '#06b6d4' },
+                    { label: 'ERNX (yield capture)', value: allocation.positions.ERNX.value ?? 0, color: '#8b5cf6' },
+                    { label: 'Cash IB + Saxo', value: allocation.total_cash, color: '#475569' },
+                ] %}
+                {% for dp in dpItems %}
+                <div class="flex-between" style="padding: 8px 0; border-bottom: 1px solid rgba(148,163,184,0.06);">
+                    <span style="font-size: 12px; color: {{ dp.color }};" class="fw-500">
+                        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: {{ dp.color }}; margin-right: 8px;"></span>{{ dp.label }}
+                    </span>
+                    <span style="font-size: 12px;" class="fw-700 mono">{{ _self.fmtEur(dp.value) }}</span>
+                </div>
+                {% endfor %}
+            </div>
+
+            {# 5 Vragen #}
+            <div class="glass">
+                <div class="section-label"><span class="section-label__text">5 Vragen Om NIET Te Verkopen</span></div>
+                {% for q in five_questions %}
+                <div class="question">
+                    <span class="question__num">{{ loop.index }}</span>
+                    <span style="font-size: 12px; line-height: 1.5;" class="text-label">{{ q }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    {# ════════════════════════════════════════════════════════════════
+       TAB: FACTOREN
+       ════════════════════════════════════════════════════════════════ #}
+    <div class="tab-panel" data-tabs-target="panel" data-panel="factors">
+        <div class="grid grid--2">
+            {# Radar Chart #}
+            <div class="glass">
+                <div class="section-label"><span class="section-label__text">Factor Exposure v6.5</span></div>
+                <div class="chart-wrap chart-wrap--h280">
+                    {{ render_chart(radar_chart) }}
+                </div>
+            </div>
+
+            {# Factor Scores Detail #}
+            <div class="glass">
+                <div class="section-label"><span class="section-label__text">Factor Scores Detail</span></div>
+                {% set fColors = ['#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#06b6d4'] %}
+                {% for f in factors %}
+                <div class="mb-16">
+                    <div class="flex-between mb-4">
+                        <span style="font-size: 13px; color: {{ fColors[loop.index0] }};" class="fw-600">{{ f.factor }}</span>
+                        <span style="font-size: 13px;" class="fw-800">{{ (f.score * 100)|number_format(0) }}%</span>
+                    </div>
+                    <div class="factor-bar">
+                        <div class="factor-bar__fill" style="width: {{ (f.score / 0.6 * 100)|number_format(0) }}%; background: linear-gradient(90deg, {{ fColors[loop.index0] }}88, {{ fColors[loop.index0] }});"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            {# Factor Mapping #}
+            <div class="glass">
+                <div class="section-label"><span class="section-label__text">Positie → Factor Mapping</span></div>
+                {% for m in factor_mapping %}
+                <div style="padding: 10px 0; border-bottom: 1px solid rgba(148,163,184,0.06);">
+                    <div class="fw-700 mb-4">{{ m.position }}</div>
+                    <div class="flex gap-4 mb-2">
+                        {% for f in m.factors %}
+                        <span class="badge badge--blue" style="font-size: 10px;">{{ f }}</span>
+                        {% endfor %}
+                    </div>
+                    <div style="font-size: 11px;" class="text-muted">{{ m.description }}</div>
+                </div>
+                {% endfor %}
+            </div>
+
+            {# Performance Chart #}
+            <div class="glass">
+                <div class="section-label"><span class="section-label__text">Performance per Positie</span></div>
+                <div class="chart-wrap chart-wrap--h280">
+                    {{ render_chart(performance_chart) }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# ════════════════════════════════════════════════════════════════
+       TAB: MOMENTUM
+       ════════════════════════════════════════════════════════════════ #}
+    <div class="tab-panel" data-tabs-target="panel" data-panel="momentum">
+        {% if momentum_error %}
+        <div class="alert alert--warning">Momentum data kon niet worden geladen.</div>
+        {% endif %}
+
+        <div class="grid grid--2">
+            {# Regime Signal #}
+            <div class="glass {{ signal.regime.bull ? 'glass--green' : 'glass--red' }}">
+                <div class="section-label"><span class="section-label__text">Regime Signaal</span></div>
+                <div class="inner-panel--big mb-16">
+                    <div class="stat__label">IWDA vs MA200</div>
+                    <div style="font-size: 42px; font-weight: 800; margin-top: 8px;" class="{{ signal.regime.bull ? 'text-green' : 'text-red' }}">
+                        {{ signal.regime.bull ? 'BULL' : 'BEAR' }}
+                    </div>
+                    <div style="font-size: 13px; margin-top: 8px;" class="text-muted">
+                        Prijs: <span class="mono fw-700 text-dim">{{ signal.regime.price|number_format(2) }}</span>
+                        &nbsp;|&nbsp;
+                        MA200: <span class="mono fw-700 text-dim">{{ signal.regime.ma200|number_format(2) }}</span>
+                    </div>
+                    {% set diff = signal.regime.price - signal.regime.ma200 %}
+                    {% set diffPct = signal.regime.ma200 > 0 ? (diff / signal.regime.ma200 * 100) : 0 %}
+                    <div style="font-size: 12px; margin-top: 4px;">
+                        <span class="{{ diff >= 0 ? 'text-green' : 'text-red' }} fw-700">
+                            {{ diff >= 0 ? '+' : '' }}{{ diffPct|number_format(1) }}% {{ diff >= 0 ? 'boven' : 'onder' }} MA200
+                        </span>
+                    </div>
+                </div>
+                <div class="inner-panel">
+                    <div style="font-size: 11px; font-weight: 700; color: var(--text-label); margin-bottom: 6px; letter-spacing: 1px;">STRATEGIE</div>
+                    <div style="font-size: 12px; line-height: 1.6;" class="text-label">{{ signal.reason }}</div>
+                </div>
+            </div>
+
+            {# Momentum Allocatie #}
+            <div class="glass">
+                <div class="section-label"><span class="section-label__text">Momentum Allocatie</span></div>
+                {% for ticker, weight in signal.allocation %}
+                <div class="flex-between" style="padding: 10px 0; border-bottom: 1px solid rgba(148,163,184,0.06);">
+                    <div>
+                        <span class="fw-700" style="font-size: 14px;">{{ ticker }}</span>
+                        {% if signal.scores[ticker] is defined %}
+                        <span class="text-muted" style="font-size: 11px; margin-left: 6px;">{{ signal.scores[ticker].name }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center gap-12">
+                        <div style="width: 120px;">
+                            {{ _self.miniBar(weight * 100, 100, weight >= 0.5 ? '#22c55e' : '#3b82f6') }}
+                        </div>
+                        <span class="mono fw-800" style="font-size: 16px; width: 50px; text-align: right;">{{ (weight * 100)|number_format(0) }}%</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            {# Momentum Scores Tabel #}
+            <div class="glass grid--full">
+                <div class="section-label"><span class="section-label__text">ETF Momentum Scores (12-1 maand)</span></div>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Ticker</th>
+                                <th>Naam</th>
+                                <th>Rol</th>
+                                <th class="text-right">Score</th>
+                                <th class="text-right">Prijs</th>
+                                <th>Allocatie</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% set rank = 1 %}
+                            {% for ticker, s in signal.scores %}
+                            {% set inAlloc = signal.allocation[ticker] is defined %}
+                            <tr style="{{ s.cash ? 'opacity: 0.5;' : '' }}{{ inAlloc ? 'background: rgba(34,197,94,0.04);' : '' }}">
+                                <td class="text-muted">{{ rank }}</td>
+                                <td class="fw-700 mono">{{ ticker }}</td>
+                                <td>{{ s.name }}</td>
+                                <td class="text-muted" style="font-size: 11px;">{{ s.role }}</td>
+                                <td class="text-right">
+                                    {% if s.score <= -999 %}
+                                        <span class="text-muted">n/a</span>
+                                    {% else %}
+                                        <span class="mono fw-700 {{ s.score > 0 ? 'text-green' : 'text-red' }}">{{ s.score|number_format(3) }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-right mono">{{ s.last_price|number_format(2) }}</td>
+                                <td>
+                                    {% if inAlloc %}
+                                        <span class="badge badge--green">{{ (signal.allocation[ticker] * 100)|number_format(0) }}%</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% set rank = rank + 1 %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div style="margin-top: 12px; font-size: 11px;" class="text-muted">
+                    Score = risico-gecorrigeerd momentum (12 maanden return excl. laatste maand / volatiliteit).
+                    XEON uitgesloten van ranking (cash equivalent). Bull/bear regime op basis van IWDA vs 200-daags gemiddelde.
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

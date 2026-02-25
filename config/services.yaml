@@ -1,6 +1,7 @@
 # yaml-language-server: $schema=../vendor/symfony/dependency-injection/Loader/schema/services.schema.json
 
 parameters:
+    fred_api_key: '%env(FRED_API_KEY)%'
 
 services:
     _defaults:
@@ -16,6 +17,7 @@ services:
             string $saxoAuthEndpoint: '%env(SAXO_AUTH_ENDPOINT)%'
             string $saxoTokenEndpoint: '%env(SAXO_TOKEN_ENDPOINT)%'
             string $saxoApiBase: '%env(SAXO_API_BASE)%'
+            string $fredApiKey: '%fred_api_key%'
 
     App\:
         resource: '../src/'

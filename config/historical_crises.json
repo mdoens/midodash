@@ -1,0 +1,57 @@
+[
+    {
+        "name": "Global Financial Crisis",
+        "year": 2008,
+        "start_date": "2007-10-09",
+        "bottom_date": "2009-03-09",
+        "max_drawdown": -57,
+        "recovery_months": 65,
+        "vix_peak": 80.86,
+        "hy_spread_peak": 2182,
+        "description": "Subprime mortgage crisis leading to global banking collapse"
+    },
+    {
+        "name": "European Debt Crisis",
+        "year": 2011,
+        "start_date": "2011-05-02",
+        "bottom_date": "2011-10-03",
+        "max_drawdown": -22,
+        "recovery_months": 7,
+        "vix_peak": 48.0,
+        "hy_spread_peak": 880,
+        "description": "Greek debt crisis and eurozone contagion fears"
+    },
+    {
+        "name": "Q4 2018 Selloff",
+        "year": 2018,
+        "start_date": "2018-09-20",
+        "bottom_date": "2018-12-24",
+        "max_drawdown": -20,
+        "recovery_months": 4,
+        "vix_peak": 36.07,
+        "hy_spread_peak": 533,
+        "description": "Fed rate hikes, trade war fears, growth slowdown"
+    },
+    {
+        "name": "COVID-19 Crash",
+        "year": 2020,
+        "start_date": "2020-02-19",
+        "bottom_date": "2020-03-23",
+        "max_drawdown": -34,
+        "recovery_months": 5,
+        "vix_peak": 82.69,
+        "hy_spread_peak": 1100,
+        "description": "Global pandemic causing fastest bear market in history"
+    },
+    {
+        "name": "2022 Bear Market",
+        "year": 2022,
+        "start_date": "2022-01-03",
+        "bottom_date": "2022-10-12",
+        "max_drawdown": -27,
+        "recovery_months": 15,
+        "vix_peak": 38.94,
+        "hy_spread_peak": 600,
+        "description": "Inflation spike, Fed tightening, Ukraine war"
+    }
+]
