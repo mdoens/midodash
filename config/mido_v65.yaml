@@ -5,12 +5,13 @@ mido:
 
     # v6.5 target allocations
     targets:
-        NT World:     { target: 22, ticker: 'NTWCEAE.MFU', platform: Saxo, asset_class: equity, isin: 'NL0011225305' }
-        NT Europe:    { target: 3,  ticker: 'NTECNA.MFU',  platform: Saxo, asset_class: equity, isin: 'NL0010948220' }
+        NT World:     { target: 22, ticker: 'NTWCEAE.MFU',  platform: Saxo, asset_class: equity, isin: 'NL0011225305' }
+        NT Europe:    { target: 3,  ticker: 'NTECENA.MFU', platform: Saxo, asset_class: equity, isin: 'NL0010948220' }
+        NT EM:        { target: 4,  ticker: 'NTEMESA.MFU', platform: Saxo, asset_class: equity, isin: 'NL0015417802' }
         AVWC:         { target: 20, ticker: 'AVWC',        platform: IBKR, asset_class: equity, isin: 'IE000OZUNBU0' }
         AVWS:         { target: 8,  ticker: 'AVWS',        platform: IBKR, asset_class: equity, isin: 'IE000JS6TQ89' }
         ZPRX:         { target: 4,  ticker: 'ZPRX',        platform: IBKR, asset_class: equity, isin: 'IE00BSPLC298' }
-        AVEM:         { target: 10, ticker: 'AVEM',        platform: IBKR, asset_class: equity, isin: 'IE000K975W13' }
+        AVEM:         { target: 6,  ticker: 'AVEM',        platform: IBKR, asset_class: equity, isin: 'IE000K975W13' }
         XEON:         { target: 5,  ticker: 'XEON',        platform: IBKR, asset_class: fixed_income, isin: 'LU0290358497' }
         IBGS:         { target: 6,  ticker: 'IBGS',        platform: IBKR, asset_class: fixed_income, isin: 'IE00B14X4Q57' }
         ERNX:         { target: 6,  ticker: 'ERNX',        platform: IBKR, asset_class: fixed_income, isin: 'LU0484969463' }
@@ -48,11 +49,11 @@ mido:
         # IB positions not in v6.5 targets (tactical/momentum)
         'IWMO': 'IWMO'
         'QCEU': 'QCEU'
-        # Saxo symbols (NT funds via DisplayAndFormat.Symbol)
-        # NOTE: verify exact symbols after Saxo login on production
-        'NtWCeae:xmfu': 'NT World'
-        'NtECnA:xmfu': 'NT Europe'
-        'NtEMesA:xmfu': 'NT Europe'
+        # Saxo symbols (verified from production logs 2026-02-25)
+        'NTWCEAE.MFU': 'NT World'
+        'NTECENA.MFU': 'NT Europe'
+        'NTEMESA.MFU': 'NT EM'
+        'ERNX:xetr': ERNX
 
     factors:
         - { factor: Beta,     score: 0.56 }
