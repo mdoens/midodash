@@ -27,7 +27,15 @@ RUN APP_ENV=prod APP_SECRET=build \
     DASHBOARD_PASSWORD_HASH=x FRED_API_KEY=x \
     php bin/console importmap:install --env=prod
 
-# Warmup Symfony cache (env vars needed at build time for container compilation)
+# Compile assets to public/assets/ (required for prod)
+RUN APP_ENV=prod APP_SECRET=build \
+    IB_TOKEN=x IB_QUERY_ID=x \
+    SAXO_APP_KEY=x SAXO_APP_SECRET=x SAXO_REDIRECT_URI=x \
+    SAXO_AUTH_ENDPOINT=x SAXO_TOKEN_ENDPOINT=x SAXO_API_BASE=x \
+    DASHBOARD_PASSWORD_HASH=x FRED_API_KEY=x \
+    php bin/console asset-map:compile --env=prod
+
+# Warmup Symfony cache
 RUN APP_ENV=prod APP_SECRET=build \
     IB_TOKEN=x IB_QUERY_ID=x \
     SAXO_APP_KEY=x SAXO_APP_SECRET=x SAXO_REDIRECT_URI=x \
