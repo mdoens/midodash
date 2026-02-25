@@ -8,6 +8,8 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class SaxoClient
 {
+    private const CACHE_TTL = 900; // 15 minuten
+
     private readonly string $appKey;
     private readonly string $appSecret;
     private readonly string $redirectUri;
@@ -15,6 +17,7 @@ class SaxoClient
     private readonly string $tokenEndpoint;
     private readonly string $apiBase;
     private readonly string $tokenFile;
+    private readonly string $cacheFile;
 
     public function __construct(
         private readonly HttpClientInterface $httpClient,
@@ -26,6 +29,7 @@ class SaxoClient
         $this->tokenEndpoint = $_ENV['SAXO_TOKEN_ENDPOINT'];
         $this->apiBase = $_ENV['SAXO_API_BASE'];
         $this->tokenFile = dirname(__DIR__, 2) . '/var/saxo_tokens.json';
+        $this->cacheFile = dirname(__DIR__, 2) . '/var/saxo_cache.json';
     }
 
     public function getAuthUrl(string $state): string
@@ -62,6 +66,7 @@ class SaxoClient
         }
 
         $this->saveTokens($tokens);
+        $this->clearCache();
 
         return $tokens;
     }
@@ -105,6 +110,11 @@ class SaxoClient
      */
     public function getPositions(): ?array
     {
+        $cached = $this->loadCache();
+        if ($cached !== null && isset($cached['positions'])) {
+            return $cached['positions'];
+        }
+
         $token = $this->getValidToken();
         if ($token === null) {
             return null;
@@ -131,9 +141,10 @@ class SaxoClient
             }
         }
 
-        $data = $response->toArray(false);
+        $positions = $this->parsePositions($response->toArray(false));
+        $this->updateCache('positions', $positions);
 
-        return $this->parsePositions($data);
+        return $positions;
     }
 
     /**
@@ -141,6 +152,11 @@ class SaxoClient
      */
     public function getAccountBalance(): ?array
     {
+        $cached = $this->loadCache();
+        if ($cached !== null && isset($cached['balance'])) {
+            return $cached['balance'];
+        }
+
         $token = $this->getValidToken();
         if ($token === null) {
             return null;
@@ -151,7 +167,10 @@ class SaxoClient
                 'headers' => ['Authorization' => 'Bearer ' . $token],
             ]);
 
-            return $response->toArray(false);
+            $balance = $response->toArray(false);
+            $this->updateCache('balance', $balance);
+
+            return $balance;
         } catch (\Throwable) {
             return null;
         }
@@ -159,6 +178,12 @@ class SaxoClient
 
     public function isAuthenticated(): bool
     {
+        // Als er cache is, zijn we authenticated (data is recent)
+        $cached = $this->loadCache();
+        if ($cached !== null) {
+            return true;
+        }
+
         return $this->getValidToken() !== null;
     }
 
@@ -172,6 +197,21 @@ class SaxoClient
         return (int) $tokens['created_at'] + (int) $tokens['expires_in'];
     }
 
+    /**
+     * @return int|null Seconden tot refresh token verloopt, null als onbekend
+     */
+    public function getRefreshTokenTtl(): ?int
+    {
+        $tokens = $this->loadTokens();
+        if ($tokens === null || !isset($tokens['created_at'], $tokens['refresh_token_expires_in'])) {
+            return null;
+        }
+
+        $expiresAt = (int) $tokens['created_at'] + (int) $tokens['refresh_token_expires_in'];
+
+        return max(0, $expiresAt - time());
+    }
+
     private function getValidToken(): ?string
     {
         $tokens = $this->loadTokens();
@@ -179,9 +219,18 @@ class SaxoClient
             return null;
         }
 
+        // Check of refresh token nog geldig is
+        if (isset($tokens['created_at'], $tokens['refresh_token_expires_in'])) {
+            $refreshExpiresAt = (int) $tokens['created_at'] + (int) $tokens['refresh_token_expires_in'];
+            if (time() > $refreshExpiresAt) {
+                return null; // Refresh token verlopen, opnieuw inloggen
+            }
+        }
+
+        // Access token bijna verlopen? Proactief refreshen
         if (isset($tokens['created_at'], $tokens['expires_in'])) {
             $expiresAt = (int) $tokens['created_at'] + (int) $tokens['expires_in'];
-            if (time() > $expiresAt - 60) {
+            if (time() > $expiresAt - 120) { // 2 minuten marge
                 $refreshed = $this->refreshToken();
 
                 return $refreshed['access_token'] ?? null;
@@ -249,5 +298,53 @@ class SaxoClient
         }
 
         return json_decode($content, true);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function loadCache(): ?array
+    {
+        if (!file_exists($this->cacheFile)) {
+            return null;
+        }
+
+        if ((time() - filemtime($this->cacheFile)) > self::CACHE_TTL) {
+            return null;
+        }
+
+        $content = file_get_contents($this->cacheFile);
+        if ($content === false) {
+            return null;
+        }
+
+        return json_decode($content, true);
+    }
+
+    private function updateCache(string $key, mixed $value): void
+    {
+        $cache = [];
+        if (file_exists($this->cacheFile)) {
+            $content = file_get_contents($this->cacheFile);
+            if ($content !== false) {
+                $cache = json_decode($content, true) ?? [];
+            }
+        }
+
+        $cache[$key] = $value;
+
+        $dir = dirname($this->cacheFile);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        file_put_contents($this->cacheFile, json_encode($cache));
+    }
+
+    private function clearCache(): void
+    {
+        if (file_exists($this->cacheFile)) {
+            unlink($this->cacheFile);
+        }
     }
 }
