@@ -27,7 +27,8 @@
 
 body {
     font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-    background: linear-gradient(135deg, #020617 0%, #0c1222 40%, #0a0f1e 100%);
+    background: linear-gradient(135deg, #020617 0%, #0c1222 40%, #0a0f1e 100%) fixed;
+    background-color: #020617;
     color: var(--text);
     line-height: 1.5;
     min-height: 100vh;
