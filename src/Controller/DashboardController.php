@@ -6,6 +6,7 @@ namespace App\Controller;
 
 use App\Service\CalculationService;
 use App\Service\CrisisService;
+use App\Service\DashboardCacheService;
 use App\Service\DxyService;
 use App\Service\EurostatService;
 use App\Service\FredApiService;
@@ -37,9 +38,69 @@ class DashboardController extends AbstractController
         GoldPriceService $goldPrice,
         DxyService $dxyService,
         TriggerService $triggerService,
+        DashboardCacheService $dashboardCache,
         ChartBuilderInterface $chartBuilder,
         LoggerInterface $logger,
     ): Response {
+        // Try loading from dashboard cache first (instant page load)
+        $cached = $dashboardCache->load();
+
+        if ($cached !== null) {
+            // Build charts from cached data (Chart objects are not serializable)
+            $cached['pie_chart'] = $this->buildAssetClassPieChart($chartBuilder, $cached['allocation']);
+            $cached['radar_chart'] = $this->buildFactorRadarChart($chartBuilder, $portfolioService->getFactorData());
+            $cached['performance_chart'] = $this->buildPerformanceChart($chartBuilder, $cached['allocation']['positions']);
+
+            // Always check live Saxo auth status
+            $cached['saxo_authenticated'] = $saxoClient->isAuthenticated();
+
+            return $this->render('dashboard/index.html.twig', $cached);
+        }
+
+        // No cache — compute everything
+        $data = $this->computeDashboardData(
+            $ibClient,
+            $saxoClient,
+            $momentumService,
+            $portfolioService,
+            $fredApi,
+            $crisisService,
+            $calculations,
+            $eurostat,
+            $goldPrice,
+            $dxyService,
+            $triggerService,
+            $logger,
+        );
+
+        // Save to cache (without Chart objects)
+        $dashboardCache->save($data);
+
+        // Build charts
+        $data['pie_chart'] = $this->buildAssetClassPieChart($chartBuilder, $data['allocation']);
+        $data['radar_chart'] = $this->buildFactorRadarChart($chartBuilder, $portfolioService->getFactorData());
+        $data['performance_chart'] = $this->buildPerformanceChart($chartBuilder, $data['allocation']['positions']);
+
+        return $this->render('dashboard/index.html.twig', $data);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function computeDashboardData(
+        IbClient $ibClient,
+        SaxoClient $saxoClient,
+        MomentumService $momentumService,
+        PortfolioService $portfolioService,
+        FredApiService $fredApi,
+        CrisisService $crisisService,
+        CalculationService $calculations,
+        EurostatService $eurostat,
+        GoldPriceService $goldPrice,
+        DxyService $dxyService,
+        TriggerService $triggerService,
+        LoggerInterface $logger,
+    ): array {
         // ── IB data ──
         $ibError = false;
         try {
@@ -64,8 +125,14 @@ class DashboardController extends AbstractController
                 $saxoPositions = $saxoClient->getPositions();
                 $saxoBalance = $saxoClient->getAccountBalance();
                 $saxoCashBalance = (float) ($saxoBalance['CashBalance'] ?? 0);
-                if ($saxoPositions === null) {
+
+                // Log Saxo symbols for debugging mapping
+                if ($saxoPositions !== null) {
+                    $symbols = array_column($saxoPositions, 'symbol');
+                    $logger->info('Saxo positions symbols', ['symbols' => $symbols]);
+                } else {
                     $saxoAuthenticated = false;
+                    $logger->warning('Saxo positions returned null despite being authenticated');
                 }
             }
         } catch (\Throwable $e) {
@@ -102,13 +169,11 @@ class DashboardController extends AbstractController
         }
 
         // ── Crisis signals ──
-        $crisisError = false;
         $crisis = ['crisis_triggered' => false, 'active_signals' => 0, 'signals' => [], 'drawdown' => []];
         try {
             $crisis = $crisisService->checkAllSignals();
         } catch (\Throwable $e) {
             $logger->error('Dashboard: Crisis data failed', ['error' => $e->getMessage()]);
-            $crisisError = true;
         }
 
         // ── Triggers ──
@@ -126,16 +191,11 @@ class DashboardController extends AbstractController
             $regimeLabel = ($vixValue !== null && $vixValue > 30) ? 'BEAR BEVESTIGD' : 'BEAR';
         }
 
-        // ── Charts ──
-        $pieChart = $this->buildAssetClassPieChart($chartBuilder, $allocation);
-        $radarChart = $this->buildFactorRadarChart($chartBuilder, $portfolioService->getFactorData());
-        $performanceChart = $this->buildPerformanceChart($chartBuilder, $allocation['positions']);
-
         // ── Sort positions by drift ──
         $positionsByDrift = $allocation['positions'];
         uasort($positionsByDrift, fn(array $a, array $b): int => (int) (abs($b['drift'] ?? 0) * 100) <=> (int) (abs($a['drift'] ?? 0) * 100));
 
-        return $this->render('dashboard/index.html.twig', [
+        return [
             'allocation' => $allocation,
             'positions_by_drift' => array_slice($positionsByDrift, 0, 5, true),
             'macro' => $macro,
@@ -152,10 +212,7 @@ class DashboardController extends AbstractController
             'saxo_error' => $saxoError,
             'momentum_error' => $momentumError,
             'macro_error' => $macroError,
-            'pie_chart' => $pieChart,
-            'radar_chart' => $radarChart,
-            'performance_chart' => $performanceChart,
-        ]);
+        ];
     }
 
     /**

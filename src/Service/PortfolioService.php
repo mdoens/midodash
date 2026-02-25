@@ -157,17 +157,40 @@ class PortfolioService
             }
         }
 
-        // Match Saxo positions
+        // Build ISIN reverse lookup for Saxo fallback matching
+        $isinMap = [];
+        foreach ($targets as $name => $config) {
+            if (isset($config['isin'])) {
+                $isinMap[$config['isin']] = $name;
+            }
+        }
+
+        // Match Saxo positions (by symbol_map, then by ISIN, then by description)
         if ($saxoPositions !== null) {
             foreach ($saxoPositions as $pos) {
                 $symbol = $pos['symbol'] ?? '';
+                $description = $pos['description'] ?? '';
                 $targetName = $symbolMap[$symbol] ?? null;
+
+                // Fallback: match by description containing target name
+                if ($targetName === null) {
+                    foreach ($targets as $name => $config) {
+                        if ($config['platform'] !== 'Saxo') {
+                            continue;
+                        }
+                        // Match on partial name (e.g. "NT World Custom" matches "NT World")
+                        if (stripos($description, $name) !== false) {
+                            $targetName = $name;
+                            break;
+                        }
+                    }
+                }
 
                 if ($targetName !== null && isset($positions[$targetName])) {
                     $value = (float) ($pos['exposure'] ?? ($pos['amount'] * ($pos['current_price'] ?? 0)));
                     $positions[$targetName]['units'] += (float) ($pos['amount'] ?? 0);
                     $positions[$targetName]['value'] += $value;
-                    $positions[$targetName]['pl'] += (float) ($pos['pnl'] ?? 0);
+                    $positions[$targetName]['pl'] += (float) ($pos['pnl_base'] ?? $pos['pnl'] ?? 0);
                     $positions[$targetName]['matched'] = true;
                 }
             }

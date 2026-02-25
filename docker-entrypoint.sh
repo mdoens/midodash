@@ -7,8 +7,19 @@ printenv | grep -vE '^(HOME|PATH|SHELL|USER|LOGNAME|_)=' > /etc/environment
 # Start cron in background
 cron
 
+# Pre-fetch IB data on startup (slow API, cache for 1h)
+echo "Pre-fetching IB data..."
+php /var/www/html/bin/console app:ib:fetch || true
+
 # Warmup momentum cache on startup
+echo "Warming up momentum cache..."
 php /var/www/html/bin/console app:momentum:warmup || true
+
+# Warmup full dashboard cache (uses IB + momentum caches + macro APIs)
+echo "Warming up dashboard cache..."
+php /var/www/html/bin/console app:dashboard:warmup || true
+
+echo "Startup warmup complete, starting Apache..."
 
 # Start Apache in foreground
 exec apache2-foreground
