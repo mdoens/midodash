@@ -126,10 +126,20 @@ class DashboardController extends AbstractController
                 $saxoBalance = $saxoClient->getAccountBalance();
                 $saxoCashBalance = (float) ($saxoBalance['CashBalance'] ?? 0);
 
-                // Log Saxo symbols for debugging mapping
+                // Log Saxo symbols for debugging mapping (stderr for Coolify visibility)
                 if ($saxoPositions !== null) {
-                    $symbols = array_column($saxoPositions, 'symbol');
-                    $logger->info('Saxo positions symbols', ['symbols' => $symbols]);
+                    $symbolDetails = [];
+                    foreach ($saxoPositions as $sp) {
+                        $symbolDetails[] = sprintf(
+                            '%s (%s) = €%s',
+                            $sp['symbol'] ?? '?',
+                            $sp['description'] ?? '?',
+                            number_format((float) ($sp['exposure'] ?? 0), 0, ',', '.'),
+                        );
+                    }
+                    $msg = 'Saxo positions: ' . implode(' | ', $symbolDetails);
+                    $logger->info($msg);
+                    file_put_contents('php://stderr', $msg . "\n");
                 } else {
                     $saxoAuthenticated = false;
                     $logger->warning('Saxo positions returned null despite being authenticated');
@@ -212,7 +222,7 @@ class DashboardController extends AbstractController
 
         return [
             'allocation' => $allocation,
-            'positions_by_drift' => array_slice($positionsByDrift, 0, 5, true),
+            'positions_by_drift' => $positionsByDrift,
             'macro' => $macro,
             'regime' => $regimeLabel,
             'crisis' => $crisis,

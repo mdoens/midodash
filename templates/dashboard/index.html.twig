@@ -214,42 +214,36 @@
             {% set rebalCount = allocation.rebal_needed|length %}
             <div class="glass {{ rebalCount > 0 ? 'glass--yellow' : 'glass--green' }}">
                 <div class="section-label"><span class="section-label__text">Herbalancering 5/25 Regel</span></div>
-                {% if rebalCount == 0 %}
-                <div style="text-align: center; padding: 20px;">
-                    <div style="font-size: 32px; margin-bottom: 8px;">✓</div>
-                    <div style="font-size: 14px; font-weight: 600;" class="text-green">Geen herbalancering nodig</div>
-                    <div style="font-size: 12px; margin-top: 4px;" class="text-muted">Alle posities binnen 5pp absoluut / 25% relatief band</div>
+                {% if rebalCount > 0 %}
+                <div style="font-size: 13px; font-weight: 600; margin-bottom: 12px;" class="text-yellow">
+                    ⚠ {{ rebalCount }} positie(s) buiten 5/25 band
                 </div>
                 {% else %}
-                <div style="font-size: 13px; font-weight: 600; margin-bottom: 12px;" class="text-yellow">
-                    ⚠ {{ rebalCount }} positie(s) buiten band
+                <div style="font-size: 13px; font-weight: 600; margin-bottom: 12px;" class="text-green">
+                    ✓ Alle posities binnen band
                 </div>
-                {% for name, p in allocation.rebal_needed %}
-                <div class="flex-between" style="padding: 8px 0; border-bottom: 1px solid rgba(148,163,184,0.08);">
-                    <span style="font-size: 13px;" class="fw-600">{{ name }}</span>
-                    <span style="font-size: 12px;">
-                        <span class="text-dim">{{ p.current_pct|number_format(1) }}%</span>
-                        <span class="text-muted"> / {{ p.target }}%</span>
-                        <span class="text-yellow fw-700" style="margin-left: 8px;">{{ _self.fmtPct(p.drift) }}pp</span>
-                    </span>
-                </div>
-                {% endfor %}
                 {% endif %}
 
-                <div class="mt-16">
-                    <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 1.5px; margin-bottom: 8px;">GROOTSTE DRIFTS</div>
-                    {% for name, p in positions_by_drift %}
-                    <div class="flex items-center gap-8" style="padding: 4px 0;">
-                        <span style="font-size: 12px; flex: 1;" class="text-label fw-500">{{ name }}</span>
-                        <span style="font-size: 11px;" class="text-muted">{{ p.current_pct|number_format(1) }}%</span>
-                        <span style="font-size: 11px;" class="text-muted">→ {{ p.target }}%</span>
+                <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 1.5px; margin-bottom: 8px;">ALLE POSITIES VS TARGET</div>
+                {% for name, p in positions_by_drift %}
+                {% if p.target > 0 %}
+                <div class="flex items-center gap-8" style="padding: 5px 0; border-bottom: 1px solid rgba(148,163,184,0.06);">
+                    <span style="font-size: 12px; width: 90px;" class="fw-600 {{ p.status == 'ONTBREEKT' ? 'text-muted' : 'text-label' }}">{{ name }}</span>
+                    <div class="flex-1">
                         {% set absDrift = p.drift|abs %}
-                        <span style="font-size: 11px; width: 55px; text-align: right;" class="fw-700 {{ absDrift >= 5 ? 'text-red' : (absDrift >= 3 ? 'text-yellow' : 'text-green') }}">
-                            {{ p.drift >= 0 ? '+' : '' }}{{ p.drift|number_format(1) }}pp
-                        </span>
+                        {% set barColor = absDrift >= 5 ? '#ef4444' : (absDrift >= 3 ? '#eab308' : '#22c55e') %}
+                        {{ _self.miniBar(p.current_pct, 30, barColor) }}
                     </div>
-                    {% endfor %}
+                    <span style="font-size: 11px; width: 35px; text-align: right;" class="fw-700 mono">{{ p.current_pct|number_format(1) }}%</span>
+                    <span style="font-size: 10px; width: 30px; text-align: right;" class="text-muted">{{ p.target }}%</span>
+                    {% set absDrift = p.drift|abs %}
+                    <span style="font-size: 11px; width: 55px; text-align: right;" class="fw-700 {{ absDrift >= 5 ? 'text-red' : (absDrift >= 3 ? 'text-yellow' : 'text-green') }}">
+                        {{ p.drift >= 0 ? '+' : '' }}{{ p.drift|number_format(1) }}pp
+                    </span>
+                    <span style="width: 60px; text-align: right;">{{ _self.statusBadge(p.status) }}</span>
                 </div>
+                {% endif %}
+                {% endfor %}
             </div>
         </div>
     </div>
