@@ -4,49 +4,65 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use Psr\Log\LoggerInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class IbClient
 {
-    private readonly string $token;
-    private readonly string $queryId;
-    private readonly string $baseUrl;
+    private readonly string $cacheFile;
 
     public function __construct(
         private readonly HttpClientInterface $httpClient,
+        private readonly LoggerInterface $logger,
+        private readonly string $ibToken,
+        private readonly string $ibQueryId,
+        private readonly string $projectDir,
     ) {
-        $this->token = $_ENV['IB_TOKEN'];
-        $this->queryId = $_ENV['IB_QUERY_ID'];
-        $this->baseUrl = 'https://gdcdyn.interactivebrokers.com/Universal/servlet/FlexStatementService';
+        $this->cacheFile = $this->projectDir . '/var/ib_statement.xml';
     }
 
     public function fetchStatement(): ?string
     {
-        $response = $this->httpClient->request('GET', $this->baseUrl . '.SendRequest', [
-            'query' => ['t' => $this->token, 'q' => $this->queryId, 'v' => 3],
-        ]);
+        $baseUrl = 'https://gdcdyn.interactivebrokers.com/Universal/servlet/FlexStatementService';
 
-        $xml = simplexml_load_string($response->getContent());
-        if ($xml === false || (string) $xml->Status !== 'Success') {
-            return null;
-        }
-
-        $refCode = (string) $xml->ReferenceCode;
-
-        for ($i = 0; $i < 10; $i++) {
-            sleep(5);
-            $result = $this->httpClient->request('GET', $this->baseUrl . '.GetStatement', [
-                'query' => ['q' => $refCode, 't' => $this->token, 'v' => 3],
+        try {
+            $response = $this->httpClient->request('GET', $baseUrl . '.SendRequest', [
+                'query' => ['t' => $this->ibToken, 'q' => $this->ibQueryId, 'v' => 3],
             ]);
 
-            $content = $result->getContent();
-            $check = @simplexml_load_string($content);
+            $xml = simplexml_load_string($response->getContent());
+            if ($xml === false || (string) $xml->Status !== 'Success') {
+                $this->logger->warning('IB Flex SendRequest failed', [
+                    'status' => $xml !== false ? (string) $xml->Status : 'parse_error',
+                ]);
 
-            if ($check !== false && isset($check->Status) && (string) $check->Status !== 'Success') {
-                continue;
+                return null;
             }
 
-            return $content;
+            $refCode = (string) $xml->ReferenceCode;
+            $this->logger->info('IB Flex statement requested', ['ref' => $refCode]);
+
+            for ($i = 0; $i < 10; $i++) {
+                sleep(5);
+                $result = $this->httpClient->request('GET', $baseUrl . '.GetStatement', [
+                    'query' => ['q' => $refCode, 't' => $this->ibToken, 'v' => 3],
+                ]);
+
+                $content = $result->getContent();
+                $check = @simplexml_load_string($content);
+
+                if ($check !== false && isset($check->Status) && (string) $check->Status !== 'Success') {
+                    continue;
+                }
+
+                $this->logger->info('IB Flex statement received', ['attempt' => $i + 1]);
+
+                return $content;
+            }
+
+            $this->logger->error('IB Flex statement timeout after 10 attempts');
+        } catch (\Throwable $e) {
+            $this->logger->error('IB Flex API error', ['error' => $e->getMessage()]);
         }
 
         return null;
@@ -57,26 +73,27 @@ class IbClient
      */
     public function getPositions(): array
     {
-        $cacheFile = dirname(__DIR__, 2) . '/var/ib_statement.xml';
         $content = null;
 
-        if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < 3600) {
-            $content = file_get_contents($cacheFile);
+        if (file_exists($this->cacheFile) && (time() - filemtime($this->cacheFile)) < 3600) {
+            $content = file_get_contents($this->cacheFile);
             if ($content === false) {
                 $content = null;
             }
         } else {
             $content = $this->fetchStatement();
             if ($content !== null) {
-                $dir = dirname($cacheFile);
+                $dir = dirname($this->cacheFile);
                 if (!is_dir($dir)) {
                     mkdir($dir, 0755, true);
                 }
-                file_put_contents($cacheFile, $content);
+                file_put_contents($this->cacheFile, $content);
             }
         }
 
         if ($content === null) {
+            $this->logger->warning('IB positions unavailable: no cached or fresh data');
+
             return [];
         }
 
@@ -88,18 +105,19 @@ class IbClient
      */
     public function getCashReport(): array
     {
-        $cacheFile = dirname(__DIR__, 2) . '/var/ib_statement.xml';
-        if (!file_exists($cacheFile)) {
+        if (!file_exists($this->cacheFile)) {
             return [];
         }
 
-        $rawContent = file_get_contents($cacheFile);
+        $rawContent = file_get_contents($this->cacheFile);
         if ($rawContent === false) {
             return [];
         }
 
         $xml = simplexml_load_string($rawContent);
         if ($xml === false) {
+            $this->logger->warning('IB cash report: failed to parse XML');
+
             return [];
         }
 
@@ -117,13 +135,20 @@ class IbClient
         ];
     }
 
+    public function getCacheFile(): string
+    {
+        return $this->cacheFile;
+    }
+
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function parsePositions(string $xmlContent): array
+    public function parsePositions(string $xmlContent): array
     {
-        $xml = simplexml_load_string($xmlContent);
+        $xml = @simplexml_load_string($xmlContent);
         if ($xml === false) {
+            $this->logger->warning('IB parsePositions: invalid XML');
+
             return [];
         }
 

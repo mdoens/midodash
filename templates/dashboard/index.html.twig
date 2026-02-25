@@ -1,6 +1,31 @@
 {% extends 'base.html.twig' %}
 
 {% block body %}
+{% for message in app.flashes('error') %}
+    <div class="alert alert-error" style="background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+        {{ message }}
+    </div>
+{% endfor %}
+{% for message in app.flashes('success') %}
+    <div class="alert alert-success" style="background: #f0fdf4; border: 1px solid #86efac; color: #166534; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+        {{ message }}
+    </div>
+{% endfor %}
+{% if ib_error %}
+    <div class="alert alert-warning" style="background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+        Interactive Brokers data is momenteel niet beschikbaar.
+    </div>
+{% endif %}
+{% if saxo_error %}
+    <div class="alert alert-warning" style="background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+        Saxo Bank data kon niet worden opgehaald.
+    </div>
+{% endif %}
+{% if momentum_error %}
+    <div class="alert alert-warning" style="background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+        Momentum signaal kon niet worden berekend.
+    </div>
+{% endif %}
 <header>
     <div>
         <h1>MIDO Dashboard</h1>

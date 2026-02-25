@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use Psr\Log\LoggerInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class MomentumService
@@ -28,8 +29,10 @@ class MomentumService
 
     public function __construct(
         private readonly HttpClientInterface $httpClient,
+        private readonly LoggerInterface $logger,
+        private readonly string $projectDir,
     ) {
-        $this->cacheFile = dirname(__DIR__, 2) . '/var/momentum_cache.json';
+        $this->cacheFile = $this->projectDir . '/var/momentum_cache.json';
     }
 
     /**
@@ -44,8 +47,14 @@ class MomentumService
 
         $signal = $this->computeSignal();
         $this->saveCache($signal);
+        $this->logger->info('Momentum signal computed', ['reason' => $signal['reason'] ?? '']);
 
         return $signal;
+    }
+
+    public function getCacheFile(): string
+    {
+        return $this->cacheFile;
     }
 
     /**
@@ -76,7 +85,6 @@ class MomentumService
             ];
         }
 
-        // Top 2, nooit 2 aandelenETFs tegelijk
         $top2 = [];
         $seenEquity = false;
 
@@ -154,6 +162,8 @@ class MomentumService
         $prices = array_filter($prices, fn(mixed $p): bool => $p !== null && $p > 0);
 
         if (count($prices) < 200) {
+            $this->logger->warning('Momentum regime check: insufficient data', ['count' => count($prices)]);
+
             return ['bull' => true, 'price' => 0, 'ma200' => 0, 'error' => 'Onvoldoende data'];
         }
 
@@ -249,7 +259,9 @@ class MomentumService
             ]);
 
             return $response->toArray(false);
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            $this->logger->warning('Yahoo Finance request failed', ['url' => $url, 'error' => $e->getMessage()]);
+
             return [];
         }
     }
@@ -259,7 +271,7 @@ class MomentumService
      *
      * @return array<int, float>
      */
-    private function monthlyReturns(array $prices): array
+    public function monthlyReturns(array $prices): array
     {
         $values = array_values($prices);
         $returns = [];
@@ -276,7 +288,7 @@ class MomentumService
     /**
      * @param array<int, float> $returns
      */
-    private function momentumScore(array $returns): float
+    public function momentumScore(array $returns): float
     {
         if (count($returns) < 7) {
             return -999.0;

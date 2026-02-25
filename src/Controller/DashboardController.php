@@ -7,6 +7,7 @@ namespace App\Controller;
 use App\Service\IbClient;
 use App\Service\MomentumService;
 use App\Service\SaxoClient;
+use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -18,34 +19,57 @@ class DashboardController extends AbstractController
         IbClient $ibClient,
         SaxoClient $saxoClient,
         MomentumService $momentumService,
+        LoggerInterface $logger,
     ): Response {
-        // IB posities
-        $ibPositions = $ibClient->getPositions();
-        $ibCash = $ibClient->getCashReport();
+        $ibError = false;
+        $saxoError = false;
+        $momentumError = false;
+
+        try {
+            $ibPositions = $ibClient->getPositions();
+            $ibCash = $ibClient->getCashReport();
+        } catch (\Throwable $e) {
+            $logger->error('Dashboard: IB data failed', ['error' => $e->getMessage()]);
+            $ibPositions = [];
+            $ibCash = [];
+            $ibError = true;
+        }
+
         $ibTotalValue = array_sum(array_column($ibPositions, 'value'));
         $ibTotalCost = array_sum(array_column($ibPositions, 'cost'));
         $ibCashBalance = $ibCash['ending_cash'] ?? 0.0;
 
-        // Saxo posities (null als niet ingelogd)
         $saxoPositions = null;
         $saxoBalance = null;
-        $saxoAuthenticated = $saxoClient->isAuthenticated();
-        if ($saxoAuthenticated) {
-            $saxoPositions = $saxoClient->getPositions();
-            $saxoBalance = $saxoClient->getAccountBalance();
-            if ($saxoPositions === null) {
-                $saxoAuthenticated = false;
+        $saxoAuthenticated = false;
+
+        try {
+            $saxoAuthenticated = $saxoClient->isAuthenticated();
+            if ($saxoAuthenticated) {
+                $saxoPositions = $saxoClient->getPositions();
+                $saxoBalance = $saxoClient->getAccountBalance();
+                if ($saxoPositions === null) {
+                    $saxoAuthenticated = false;
+                }
             }
+        } catch (\Throwable $e) {
+            $logger->error('Dashboard: Saxo data failed', ['error' => $e->getMessage()]);
+            $saxoError = true;
         }
 
         $saxoTotalPnl = $saxoPositions !== null ? array_sum(array_column($saxoPositions, 'pnl')) : 0;
         $saxoTotalExposure = $saxoPositions !== null ? array_sum(array_column($saxoPositions, 'exposure')) : 0;
         $saxoCashBalance = (float) ($saxoBalance['CashBalance'] ?? 0);
 
-        // Momentum signaal
-        $signal = $momentumService->getSignal();
+        $signal = ['regime' => ['bull' => true, 'price' => 0, 'ma200' => 0], 'scores' => [], 'allocation' => [], 'reason' => ''];
 
-        // Grand total (posities + cash)
+        try {
+            $signal = $momentumService->getSignal();
+        } catch (\Throwable $e) {
+            $logger->error('Dashboard: Momentum data failed', ['error' => $e->getMessage()]);
+            $momentumError = true;
+        }
+
         $grandTotal = $ibTotalValue + $ibCashBalance + $saxoTotalExposure + $saxoCashBalance;
 
         return $this->render('dashboard/index.html.twig', [
@@ -61,6 +85,9 @@ class DashboardController extends AbstractController
             'saxo_cash_balance' => $saxoCashBalance,
             'signal' => $signal,
             'grand_total' => $grandTotal,
+            'ib_error' => $ibError,
+            'saxo_error' => $saxoError,
+            'momentum_error' => $momentumError,
         ]);
     }
 }

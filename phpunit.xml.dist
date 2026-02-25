@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="tests/bootstrap.php"
+         colors="true"
+>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests</directory>
+        </testsuite>
+    </testsuites>
+
+    <php>
+        <env name="APP_ENV" value="test" force="true"/>
+        <env name="APP_SECRET" value="test_secret" force="true"/>
+        <env name="KERNEL_CLASS" value="App\Kernel"/>
+        <env name="IB_TOKEN" value="test_ib_token"/>
+        <env name="IB_QUERY_ID" value="test_ib_query"/>
+        <env name="SAXO_APP_KEY" value="test_key"/>
+        <env name="SAXO_APP_SECRET" value="test_secret"/>
+        <env name="SAXO_REDIRECT_URI" value="https://example.com/callback"/>
+        <env name="SAXO_AUTH_ENDPOINT" value="https://example.com/auth"/>
+        <env name="SAXO_TOKEN_ENDPOINT" value="https://example.com/token"/>
+        <env name="SAXO_API_BASE" value="https://example.com/api"/>
+        <env name="DASHBOARD_PASSWORD_HASH" value="$2y$13$test"/>
+    </php>
+</phpunit>

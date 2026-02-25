@@ -4,40 +4,37 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use Psr\Log\LoggerInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class SaxoClient
 {
-    private const CACHE_TTL = 900; // 15 minuten
+    private const CACHE_TTL = 900;
 
-    private readonly string $appKey;
-    private readonly string $appSecret;
-    private readonly string $redirectUri;
-    private readonly string $authEndpoint;
-    private readonly string $tokenEndpoint;
-    private readonly string $apiBase;
     private readonly string $tokenFile;
     private readonly string $cacheFile;
 
     public function __construct(
         private readonly HttpClientInterface $httpClient,
+        private readonly LoggerInterface $logger,
+        private readonly string $saxoAppKey,
+        private readonly string $saxoAppSecret,
+        private readonly string $saxoRedirectUri,
+        private readonly string $saxoAuthEndpoint,
+        private readonly string $saxoTokenEndpoint,
+        private readonly string $saxoApiBase,
+        private readonly string $projectDir,
     ) {
-        $this->appKey = $_ENV['SAXO_APP_KEY'];
-        $this->appSecret = $_ENV['SAXO_APP_SECRET'];
-        $this->redirectUri = $_ENV['SAXO_REDIRECT_URI'];
-        $this->authEndpoint = $_ENV['SAXO_AUTH_ENDPOINT'];
-        $this->tokenEndpoint = $_ENV['SAXO_TOKEN_ENDPOINT'];
-        $this->apiBase = $_ENV['SAXO_API_BASE'];
-        $this->tokenFile = dirname(__DIR__, 2) . '/var/saxo_tokens.json';
-        $this->cacheFile = dirname(__DIR__, 2) . '/var/saxo_cache.json';
+        $this->tokenFile = $this->projectDir . '/var/saxo_tokens.json';
+        $this->cacheFile = $this->projectDir . '/var/saxo_cache.json';
     }
 
     public function getAuthUrl(string $state): string
     {
-        return $this->authEndpoint . '?' . http_build_query([
-            'client_id' => $this->appKey,
+        return $this->saxoAuthEndpoint . '?' . http_build_query([
+            'client_id' => $this->saxoAppKey,
             'response_type' => 'code',
-            'redirect_uri' => $this->redirectUri,
+            'redirect_uri' => $this->saxoRedirectUri,
             'state' => $state,
         ]);
     }
@@ -49,24 +46,26 @@ class SaxoClient
      */
     public function exchangeCode(string $code): array
     {
-        $response = $this->httpClient->request('POST', $this->tokenEndpoint, [
+        $response = $this->httpClient->request('POST', $this->saxoTokenEndpoint, [
             'body' => [
                 'grant_type' => 'authorization_code',
-                'client_id' => $this->appKey,
-                'client_secret' => $this->appSecret,
+                'client_id' => $this->saxoAppKey,
+                'client_secret' => $this->saxoAppSecret,
                 'code' => $code,
-                'redirect_uri' => $this->redirectUri,
+                'redirect_uri' => $this->saxoRedirectUri,
             ],
         ]);
 
         $tokens = $response->toArray(false);
 
         if (!isset($tokens['access_token'])) {
+            $this->logger->error('Saxo token exchange failed', ['response' => $tokens]);
             throw new \RuntimeException('Token exchange failed: ' . json_encode($tokens));
         }
 
         $this->saveTokens($tokens);
         $this->clearCache();
+        $this->logger->info('Saxo token exchange successful');
 
         return $tokens;
     }
@@ -82,11 +81,11 @@ class SaxoClient
         }
 
         try {
-            $response = $this->httpClient->request('POST', $this->tokenEndpoint, [
+            $response = $this->httpClient->request('POST', $this->saxoTokenEndpoint, [
                 'body' => [
                     'grant_type' => 'refresh_token',
-                    'client_id' => $this->appKey,
-                    'client_secret' => $this->appSecret,
+                    'client_id' => $this->saxoAppKey,
+                    'client_secret' => $this->saxoAppSecret,
                     'refresh_token' => $tokens['refresh_token'],
                 ],
             ]);
@@ -94,13 +93,18 @@ class SaxoClient
             $newTokens = $response->toArray(false);
 
             if (!isset($newTokens['access_token'])) {
+                $this->logger->warning('Saxo token refresh returned no access_token');
+
                 return null;
             }
 
             $this->saveTokens($newTokens);
+            $this->logger->info('Saxo token refreshed successfully');
 
             return $newTokens;
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            $this->logger->error('Saxo token refresh failed', ['error' => $e->getMessage()]);
+
             return null;
         }
     }
@@ -120,31 +124,42 @@ class SaxoClient
             return null;
         }
 
-        $response = $this->httpClient->request('GET', $this->apiBase . '/port/v1/positions/me', [
-            'headers' => ['Authorization' => 'Bearer ' . $token],
-            'query' => ['FieldGroups' => 'DisplayAndFormat,PositionBase,PositionView'],
-        ]);
-
-        if ($response->getStatusCode() === 401) {
-            $refreshed = $this->refreshToken();
-            if ($refreshed === null) {
-                return null;
-            }
-
-            $response = $this->httpClient->request('GET', $this->apiBase . '/port/v1/positions/me', [
-                'headers' => ['Authorization' => 'Bearer ' . $refreshed['access_token']],
+        try {
+            $response = $this->httpClient->request('GET', $this->saxoApiBase . '/port/v1/positions/me', [
+                'headers' => ['Authorization' => 'Bearer ' . $token],
                 'query' => ['FieldGroups' => 'DisplayAndFormat,PositionBase,PositionView'],
             ]);
 
             if ($response->getStatusCode() === 401) {
-                return null;
+                $refreshed = $this->refreshToken();
+                if ($refreshed === null) {
+                    $this->logger->warning('Saxo positions: auth failed after refresh');
+
+                    return null;
+                }
+
+                $response = $this->httpClient->request('GET', $this->saxoApiBase . '/port/v1/positions/me', [
+                    'headers' => ['Authorization' => 'Bearer ' . $refreshed['access_token']],
+                    'query' => ['FieldGroups' => 'DisplayAndFormat,PositionBase,PositionView'],
+                ]);
+
+                if ($response->getStatusCode() === 401) {
+                    $this->logger->error('Saxo positions: still 401 after token refresh');
+
+                    return null;
+                }
             }
+
+            $positions = $this->parsePositions($response->toArray(false));
+            $this->updateCache('positions', $positions);
+            $this->logger->info('Saxo positions fetched', ['count' => count($positions)]);
+
+            return $positions;
+        } catch (\Throwable $e) {
+            $this->logger->error('Saxo positions fetch failed', ['error' => $e->getMessage()]);
+
+            return null;
         }
-
-        $positions = $this->parsePositions($response->toArray(false));
-        $this->updateCache('positions', $positions);
-
-        return $positions;
     }
 
     /**
@@ -163,7 +178,7 @@ class SaxoClient
         }
 
         try {
-            $response = $this->httpClient->request('GET', $this->apiBase . '/port/v1/balances/me', [
+            $response = $this->httpClient->request('GET', $this->saxoApiBase . '/port/v1/balances/me', [
                 'headers' => ['Authorization' => 'Bearer ' . $token],
             ]);
 
@@ -171,14 +186,15 @@ class SaxoClient
             $this->updateCache('balance', $balance);
 
             return $balance;
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            $this->logger->error('Saxo balance fetch failed', ['error' => $e->getMessage()]);
+
             return null;
         }
     }
 
     public function isAuthenticated(): bool
     {
-        // Als er cache is, zijn we authenticated (data is recent)
         $cached = $this->loadCache();
         if ($cached !== null) {
             return true;
@@ -197,9 +213,6 @@ class SaxoClient
         return (int) $tokens['created_at'] + (int) $tokens['expires_in'];
     }
 
-    /**
-     * @return int|null Seconden tot refresh token verloopt, null als onbekend
-     */
     public function getRefreshTokenTtl(): ?int
     {
         $tokens = $this->loadTokens();
@@ -219,18 +232,16 @@ class SaxoClient
             return null;
         }
 
-        // Check of refresh token nog geldig is
         if (isset($tokens['created_at'], $tokens['refresh_token_expires_in'])) {
             $refreshExpiresAt = (int) $tokens['created_at'] + (int) $tokens['refresh_token_expires_in'];
             if (time() > $refreshExpiresAt) {
-                return null; // Refresh token verlopen, opnieuw inloggen
+                return null;
             }
         }
 
-        // Access token bijna verlopen? Proactief refreshen
         if (isset($tokens['created_at'], $tokens['expires_in'])) {
             $expiresAt = (int) $tokens['created_at'] + (int) $tokens['expires_in'];
-            if (time() > $expiresAt - 120) { // 2 minuten marge
+            if (time() > $expiresAt - 120) {
                 $refreshed = $this->refreshToken();
 
                 return $refreshed['access_token'] ?? null;
@@ -245,7 +256,7 @@ class SaxoClient
      *
      * @return array<int, array<string, mixed>>
      */
-    private function parsePositions(array $data): array
+    public function parsePositions(array $data): array
     {
         $positions = [];
         foreach ($data['Data'] ?? [] as $pos) {

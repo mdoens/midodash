@@ -29,10 +29,10 @@ RUN mkdir -p var/cache var/log var/share && chown -R www-data:www-data var/
 ENV APP_ENV=prod
 ENV APP_DEBUG=0
 
-# Cron: refresh Saxo token elke 15 minuten
-RUN echo '*/15 * * * * cd /var/www/html && php bin/console app:saxo:refresh >> var/log/cron.log 2>&1' > /etc/cron.d/saxo-refresh \
-    && chmod 0644 /etc/cron.d/saxo-refresh \
-    && crontab /etc/cron.d/saxo-refresh
+# Cron jobs
+RUN printf '*/15 * * * * cd /var/www/html && php bin/console app:saxo:refresh >> var/log/cron.log 2>&1\n*/30 * * * * cd /var/www/html && php bin/console app:ib:fetch >> var/log/cron.log 2>&1\n0 * * * * cd /var/www/html && php bin/console app:momentum:warmup >> var/log/cron.log 2>&1\n' > /etc/cron.d/midodash \
+    && chmod 0644 /etc/cron.d/midodash \
+    && crontab /etc/cron.d/midodash
 
 # Start cron + Apache
 COPY docker-entrypoint.sh /usr/local/bin/

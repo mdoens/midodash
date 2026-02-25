@@ -11,13 +11,20 @@ if [ -z "${COOLIFY_TOKEN:-}" ] && [ -f "${SCRIPT_DIR}/.env.local" ]; then
 fi
 : "${COOLIFY_TOKEN:?Set COOLIFY_TOKEN in .env.local of als env var}"
 
+# Commit message is verplicht
+if [ -z "${1:-}" ]; then
+    echo "FOUT: Commit message is verplicht."
+    echo "Gebruik: ./deploy.sh \"feat: mijn wijziging\""
+    exit 1
+fi
+
 # Commit en push
 echo "==> Git push..."
 git add -A
 if git diff --cached --quiet; then
     echo "    Geen wijzigingen."
 else
-    git commit -m "${1:-deploy: update}" --no-verify
+    git commit -m "$1" --no-verify
     git push origin main
 fi
 
