@@ -72,12 +72,20 @@ class DashboardWarmupCommand extends Command
             $this->dashboardCache->save($data);
 
             $elapsed = round(microtime(true) - $start, 1);
+
+            // Log position details for debugging
+            $posDetails = [];
+            foreach ($data['allocation']['positions'] ?? [] as $name => $p) {
+                $posDetails[] = sprintf('%s: €%s (%s)', $name, number_format($p['value'], 0, ',', '.'), $p['status']);
+            }
             $output->writeln(sprintf(
                 '<info>Dashboard cache warmed in %ss. Portfolio: €%s, Positions: %d</info>',
                 $elapsed,
                 number_format($data['allocation']['total_portfolio'] ?? 0, 0, ',', '.'),
                 count($data['allocation']['positions'] ?? []),
             ));
+            $output->writeln('Positions: ' . implode(' | ', $posDetails));
+            $output->writeln(sprintf('Saxo authenticated: %s', $data['saxo_authenticated'] ? 'YES' : 'NO'));
 
             return Command::SUCCESS;
         } catch (\Throwable $e) {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Service\DashboardCacheService;
 use App\Service\SaxoClient;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -22,7 +23,7 @@ class SaxoAuthController extends AbstractController
     }
 
     #[Route('/saxo/callback', name: 'saxo_callback')]
-    public function callback(SaxoClient $saxoClient, Request $request): Response
+    public function callback(SaxoClient $saxoClient, DashboardCacheService $dashboardCache, Request $request): Response
     {
         $state = $request->query->get('state', '');
         $expectedState = $request->getSession()->get('saxo_state', '');
@@ -45,6 +46,8 @@ class SaxoAuthController extends AbstractController
 
         try {
             $saxoClient->exchangeCode($code);
+            // Invalidate dashboard cache so Saxo data is fetched fresh
+            $dashboardCache->invalidate();
             $this->addFlash('success', 'Saxo login succesvol! Tokens opgeslagen.');
         } catch (\Throwable $e) {
             $this->addFlash('error', 'Token exchange mislukt: ' . $e->getMessage());
