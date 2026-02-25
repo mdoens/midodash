@@ -140,6 +140,14 @@ class DashboardController extends AbstractController
             $saxoError = true;
         }
 
+        // Log raw IB symbols for debugging
+        $ibSymbols = array_map(fn(array $p): string => sprintf(
+            '%s=€%s',
+            $p['symbol'] ?? '?',
+            number_format((float) ($p['value'] ?? 0), 0, ',', '.'),
+        ), $ibPositions);
+        $logger->info('IB positions loaded', ['count' => count($ibPositions), 'symbols' => $ibSymbols]);
+
         // ── Portfolio allocation (v6.5) ──
         $allocation = $portfolioService->calculateAllocations(
             $ibPositions,
@@ -147,6 +155,13 @@ class DashboardController extends AbstractController
             $ibCashBalance,
             $saxoCashBalance,
         );
+
+        // Log matched positions
+        $matched = [];
+        foreach ($allocation['positions'] as $name => $p) {
+            $matched[] = sprintf('%s: €%s (%s)', $name, number_format($p['value'], 0, ',', '.'), $p['status']);
+        }
+        $logger->info('Portfolio positions', ['positions' => $matched]);
 
         // ── Momentum signal ──
         $momentumError = false;
