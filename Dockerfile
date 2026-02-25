@@ -2,8 +2,8 @@ FROM php:8.4-apache
 
 RUN a2enmod rewrite
 
-# PHP extensions needed by Symfony
-RUN apt-get update && apt-get install -y libzip-dev unzip && \
+# PHP extensions + cron
+RUN apt-get update && apt-get install -y libzip-dev unzip cron && \
     docker-php-ext-install zip opcache && \
     rm -rf /var/lib/apt/lists/*
 
@@ -29,4 +29,14 @@ RUN mkdir -p var/cache var/log var/share && chown -R www-data:www-data var/
 ENV APP_ENV=prod
 ENV APP_DEBUG=0
 
+# Cron: refresh Saxo token elke 15 minuten
+RUN echo '*/15 * * * * cd /var/www/html && php bin/console app:saxo:refresh >> var/log/cron.log 2>&1' > /etc/cron.d/saxo-refresh \
+    && chmod 0644 /etc/cron.d/saxo-refresh \
+    && crontab /etc/cron.d/saxo-refresh
+
+# Start cron + Apache
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 EXPOSE 80
+CMD ["docker-entrypoint.sh"]
