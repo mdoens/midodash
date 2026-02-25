@@ -19,6 +19,14 @@ RUN COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --optimize-autoloader -
 COPY . .
 RUN COMPOSER_ALLOW_SUPERUSER=1 composer dump-autoload --optimize --no-interaction
 
+# Warmup Symfony cache (env vars needed at build time for container compilation)
+RUN APP_ENV=prod APP_SECRET=build \
+    IB_TOKEN=x IB_QUERY_ID=x \
+    SAXO_APP_KEY=x SAXO_APP_SECRET=x SAXO_REDIRECT_URI=x \
+    SAXO_AUTH_ENDPOINT=x SAXO_TOKEN_ENDPOINT=x SAXO_API_BASE=x \
+    DASHBOARD_PASSWORD_HASH=x \
+    php bin/console cache:warmup --env=prod
+
 # Apache: DocumentRoot to public/
 RUN sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf
 RUN printf '<Directory /var/www/html/public>\n    AllowOverride All\n    Require all granted\n</Directory>\n' >> /etc/apache2/apache2.conf
