@@ -17,7 +17,8 @@
         "symfony/cache": "^8.0",
         "symfony/ux-chartjs": "^2.32",
         "symfony/stimulus-bundle": "^2.32",
-        "symfony/ux-turbo": "^2.32"
+        "symfony/ux-turbo": "^2.32",
+        "symfony/asset": "^8.0"
     },
     "autoload": {
         "psr-4": {
