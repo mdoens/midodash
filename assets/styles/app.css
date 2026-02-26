@@ -76,12 +76,12 @@ body {
     .grid--2, .grid--3, .grid--4, .grid--5 { grid-template-columns: 1fr; }
 }
 @media (max-width: 480px) {
-    .container { padding: 16px 12px; }
-    .header__title { font-size: 22px; }
-    .tabs { width: 100%; }
-    .tab { padding: 8px 0; font-size: 12px; flex: 1; text-align: center; }
+    .container { padding: 16px 14px; }
+    .header__title { font-size: 20px; white-space: normal; }
+    .tabs { width: 100%; flex-wrap: wrap; }
+    .tab { padding: 7px 0; font-size: 11px; flex: 1 1 30%; text-align: center; }
     .stat__value { font-size: 20px; }
-    .glass { padding: 16px; }
+    .glass { padding: 14px; }
 }
 
 /* ── Header ── */
