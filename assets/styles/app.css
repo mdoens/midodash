@@ -78,9 +78,8 @@ body {
 @media (max-width: 480px) {
     .container { padding: 16px 12px; }
     .header__title { font-size: 22px; }
-    .tabs { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-    .tabs::-webkit-scrollbar { display: none; }
-    .tab { padding: 8px 14px; font-size: 12px; white-space: nowrap; }
+    .tabs { width: 100%; }
+    .tab { padding: 8px 0; font-size: 12px; flex: 1; text-align: center; }
     .stat__value { font-size: 20px; }
     .glass { padding: 16px; }
 }
