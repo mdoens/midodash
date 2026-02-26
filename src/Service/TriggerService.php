@@ -48,7 +48,7 @@ class TriggerService
         $vix = $this->fredApi->getLatestValue('VIXCLS');
         $value = $vix['value'] ?? 0.0;
 
-        return ['active' => $value > 35, 'name' => 'Market Crash', 'value' => $value, 'threshold' => 35.0];
+        return ['active' => $value > 30, 'name' => 'Market Crash', 'value' => $value, 'threshold' => 30.0];
     }
 
     /**

@@ -62,9 +62,9 @@ class CrisisService
         $dd = $drawdown['drawdown_pct'] ?? 0.0;
 
         return [
-            'active' => $dd <= -30,
+            'active' => $dd <= -20,
             'value' => $dd,
-            'threshold' => -30,
+            'threshold' => -20,
             'description' => sprintf('IWDA %.1f%% from 52w high', $dd),
         ];
     }
@@ -95,7 +95,7 @@ class CrisisService
             if ($latestVix === null && $value !== null) {
                 $latestVix = $value;
             }
-            if ($value !== null && $value > 35) {
+            if ($value !== null && $value > 30) {
                 $consecutiveDays++;
             } else {
                 break;
@@ -103,11 +103,11 @@ class CrisisService
         }
 
         return [
-            'active' => $consecutiveDays >= 5,
+            'active' => $consecutiveDays >= 3,
             'value' => $latestVix,
-            'threshold' => 35,
+            'threshold' => 30,
             'sustained_days' => $consecutiveDays,
-            'description' => sprintf('VIX %.1f (>35 for %d/5 days)', $latestVix ?? 0, $consecutiveDays),
+            'description' => sprintf('VIX %.1f (>30 for %d/3 days)', $latestVix ?? 0, $consecutiveDays),
         ];
     }
 

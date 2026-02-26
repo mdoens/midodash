@@ -1,59 +1,54 @@
 mido:
     strategy:
-        name: 'MIDO Holding Investment Strategy v6.5'
-        version: '6.5'
+        name: 'MIDO Holding Investment Strategy v8.0'
+        version: '8.0'
 
-    # v6.5 target allocations
+    # v8.0 target allocations — EUR 1.800.000 portfolio
     targets:
-        NT World:     { target: 22, ticker: 'NTWCEAE.MFU',  platform: Saxo, asset_class: equity, isin: 'NL0011225305' }
-        NT Europe:    { target: 3,  ticker: 'NTECENA.MFU', platform: Saxo, asset_class: equity, isin: 'NL0010948220' }
-        NT EM:        { target: 4,  ticker: 'NTEMESA.MFU', platform: Saxo, asset_class: equity, isin: 'NL0015417802' }
-        AVWC:         { target: 20, ticker: 'AVWC',        platform: IBKR, asset_class: equity, isin: 'IE000OZUNBU0' }
-        AVWS:         { target: 8,  ticker: 'AVWS',        platform: IBKR, asset_class: equity, isin: 'IE000JS6TQ89' }
-        ZPRX:         { target: 4,  ticker: 'ZPRX',        platform: IBKR, asset_class: equity, isin: 'IE00BSPLC298' }
-        AVEM:         { target: 6,  ticker: 'AVEM',        platform: IBKR, asset_class: equity, isin: 'IE000K975W13' }
-        XEON:         { target: 5,  ticker: 'XEON',        platform: IBKR, asset_class: fixed_income, isin: 'LU0290358497' }
-        IBGS:         { target: 6,  ticker: 'IBGS',        platform: IBKR, asset_class: fixed_income, isin: 'IE00B14X4Q57' }
-        ERNX:         { target: 6,  ticker: 'ERNX',        platform: IBKR, asset_class: fixed_income, isin: 'LU0484969463' }
-        IBGM:         { target: 6,  ticker: 'IBGM',        platform: IBKR, asset_class: fixed_income, isin: 'IE00B3VTML14' }
-        EGLN:         { target: 7,  ticker: 'EGLN',        platform: IBKR, asset_class: alternatives, isin: 'IE00B579F325' }
+        NT World:     { target: 40, ticker: 'NTWCEAE.MFU',  platform: Saxo, asset_class: equity, isin: 'NL0011225305' }
+        NT EM:        { target: 10, ticker: 'NTEMESA.MFU',   platform: Saxo, asset_class: equity, isin: 'NL0015417802' }
+        AVWC:         { target: 15, ticker: 'AVWC',          platform: IBKR, asset_class: equity, isin: 'IE00BL0L0H68' }
+        AVWS:         { target: 10, ticker: 'AVWS',          platform: IBKR, asset_class: equity, isin: 'IE000JS6TQ89' }
+        XEON:         { target: 5,  ticker: 'XEON',          platform: IBKR, asset_class: fixed_income, isin: 'LU0290358497' }
+        IBGS:         { target: 10, ticker: 'IBGS',          platform: IBKR, asset_class: fixed_income, isin: 'IE00B14X4Q57' }
+        EGLN:         { target: 7,  ticker: 'EGLN',          platform: IBKR, asset_class: alternatives, isin: 'IE00B579F325' }
         Crypto:       { target: 3,  ticker: 'BTC1+ETHWEUR+2SCS', platform: IBKR, asset_class: alternatives }
 
     asset_classes:
-        equity:       { target: 67, label: Equity,       band_low: 62,  band_high: 72 }
-        fixed_income: { target: 23, label: Vastrentend,  band_low: 18,  band_high: 28 }
+        equity:       { target: 75, label: Equity,       band_low: 70,  band_high: 80 }
+        fixed_income: { target: 15, label: Vastrentend,  band_low: 10,  band_high: 20 }
         alternatives: { target: 10, label: Alternatives, band_low: 7.5, band_high: 12.5 }
 
     geo_targets:
-        US: 43
-        Europa: 26
+        US: 40
+        Europa: 18
         'Japan/Pacific': 7
-        EM: 16
-        Alternatives: 8
+        EM: 20
+        Alternatives: 15
 
-    # Symbol mapping: IB/Saxo symbol -> v6.5 position name
+    # Symbol mapping: IB/Saxo symbol -> v8.0 position name
     symbol_map:
-        # IB symbols (verified from var/ib_statement.xml)
+        # IB symbols
         AVWC: AVWC
         AVWS: AVWS
-        ZPRX: ZPRX
-        AVEM: AVEM
         XEON: XEON
         IBGS: IBGS
-        ERNX: ERNX
-        IBGM: IBGM
         EGLN: EGLN
         'BTC1': Crypto
         'ETHWEUR': Crypto
         '2SCS': Crypto
-        # IB positions not in v6.5 targets (tactical/momentum)
+        # Saxo symbols
+        'NTWCEAE.MFU': 'NT World'
+        'NTEMESA.MFU': 'NT EM'
+        # Legacy positions still in portfolio (being sold)
+        ZPRX: ZPRX
+        AVEM: AVEM
+        ERNX: ERNX
+        IBGM: IBGM
+        'NTECENA.MFU': 'NT Europe'
+        'ERNX:xetr': ERNX
         'IWMO': 'IWMO'
         'QCEU': 'QCEU'
-        # Saxo symbols (verified from production logs 2026-02-25)
-        'NTWCEAE.MFU': 'NT World'
-        'NTECENA.MFU': 'NT Europe'
-        'NTEMESA.MFU': 'NT EM'
-        'ERNX:xetr': ERNX
 
     factors:
         - { factor: Beta,     score: 0.56 }
@@ -63,31 +58,33 @@ mido:
         - { factor: Quality,  score: 0.28 }
 
     factor_mapping:
-        - { position: 'NT World (22%)',  factors: [Beta],                  description: 'Marktgewogen kern, FGR-voordeel' }
-        - { position: 'AVWC (20%)',      factors: [Value, Quality, Momentum], description: 'Multi-factor met momentum' }
-        - { position: 'AVWS (8%)',       factors: [Value, Size, Momentum],    description: 'Small cap value met profitability' }
-        - { position: 'ZPRX (4%)',       factors: [Value, Size],              description: 'EU Small Cap Value' }
-        - { position: 'AVEM (10%)',      factors: [Value, Quality],           description: 'EM met cash-based fraud filter' }
+        - { position: 'NT World (40%)',  factors: [Beta],                     description: 'Marktgewogen kern, FGR-voordeel (FBI)' }
+        - { position: 'AVWC (15%)',      factors: [Value, Quality, Momentum], description: 'Multi-factor met momentum' }
+        - { position: 'AVWS (10%)',      factors: [Value, Size, Momentum],    description: 'Small cap value met profitability' }
+        - { position: 'NT EM (10%)',     factors: [Value, Quality],           description: 'EM kern, FGR-voordeel (FBI)' }
 
+    # v8.0 crisis thresholds (calibrated from v6.5)
     crisis:
-        price_trigger: -30
-        vix_trigger: 35
-        vix_sustained_days: 5
-        credit_trigger: 500
+        price_trigger: -20          # IWDA drawdown threshold (was -30 in v6.0)
+        vix_trigger: 30             # VIX level (was 35 in v6.0)
+        vix_sustained_days: 3       # Consecutive days required (was 5 in v6.0)
+        credit_trigger: 500         # HY spread in bps (unchanged)
 
+    # v8.0 deployment protocol
     deployment:
-        - { level: 1, condition: '1/3 signalen + DD>15%', amount: 35000, source: XEON }
-        - { level: 2, condition: '2/3 signalen',          amount: 70000, source: 'XEON + IBGS' }
-        - { level: 3, condition: '+30d: nog 2/3',         amount: 70000, source: 'IBGS + ERNX' }
-        - { level: 4, condition: '3/3 (systeem)',          amount: 0,     source: 'IBGM + rest' }
+        - { level: 1, condition: '1/3 signalen + DD>15%', amount: 25000, source: XEON }
+        - { level: 2, condition: '2/3 signalen',          amount: 45000, source: 'XEON + IBGS' }
+        - { level: 3, condition: '30d: 2/3 nog actief',   amount: 45000, source: 'IBGS' }
+        - { level: 4, condition: '30d: 3/3 (systeem)',    amount: 0,     source: 'IBGS volledig' }
 
     reference:
         ecb_deposit: 3.00
         eur_usd: 1.15
         gold_ath: 2790
 
+    # v8.0 trigger thresholds
     triggers:
-        T1: { vix_threshold: 35, drawdown_threshold: -15 }
+        T1: { vix_threshold: 30, drawdown_threshold: -20 }
         T3: { inflation_threshold: 4.0, gdp_growth_threshold: 1.0 }
         T5: { hy_spread_threshold: 6.0, ig_spread_threshold: 2.5 }
         T9: { curve_inversion_months: 6 }
@@ -103,3 +100,26 @@ mido:
         - 'Zijn de bedrijven in mijn ETFs failliet? -> NEE'
         - 'Verkoop ik uit angst of uit ratio? -> ANGST = stop'
         - 'Wat zou Warren Buffett doen? -> Bijkopen'
+
+    # v8.0 momentum-enhanced rebalancing config
+    momentum:
+        portfolio_value: 1800000
+        positions:
+            IWDA.AS:  { name: 'NT World (proxy)',          target: 0.40, type: equity,       platform: Saxo, fbi: true,  proxy: 'IWDA.AS als proxy (zelfde index)', actual: 'Northern Trust World Custom ESG' }
+            AVWC.L:   { name: 'Avantis Global Equity',     target: 0.15, type: equity,       platform: IBKR, fbi: false }
+            IEMA.AS:  { name: 'NT EM (proxy)',             target: 0.10, type: equity,       platform: Saxo, fbi: true,  proxy: 'IEMA.AS als proxy (zelfde index)', actual: 'Northern Trust EM Custom ESG' }
+            AVWS.L:   { name: 'Avantis Global SCV',        target: 0.10, type: equity,       platform: IBKR, fbi: false }
+            IBGS.AS:  { name: 'iShares EUR Govt 1-3yr',    target: 0.10, type: fixed_income, platform: IBKR, fbi: false }
+            SGLD.L:   { name: 'Invesco Physical Gold',     target: 0.07, type: alternatief,  platform: IBKR, fbi: false }
+            XEON.DE:  { name: 'Xtrackers EUR Overnight',   target: 0.05, type: cash,         platform: IBKR, fbi: false }
+        bandwidths:
+            normaal: 0.03
+            verruimd: 0.05
+            maximaal: 0.07
+        regime:
+            vix_bear_threshold: 30
+            vix_bull_threshold: 25
+            sma_period: 200
+        crypto:
+            target: 0.03
+            bandwidth: 0.02
