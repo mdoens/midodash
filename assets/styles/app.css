@@ -222,4 +222,16 @@ tr:hover { background: rgba(255, 255, 255, 0.015); }
 .chart-wrap--pie { max-width: 170px; }
 .chart-wrap--h280 { height: 280px; }
 
+/* ── Position Row (compact mobile-friendly) ── */
+.pos-row {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 0; border-bottom: 1px solid rgba(148,163,184,0.06);
+}
+.pos-row__name { font-size: 12px; font-weight: 600; min-width: 70px; flex-shrink: 0; }
+.pos-row__pct { font-size: 12px; min-width: 40px; text-align: right; }
+.pos-row__target { font-size: 10px; min-width: 30px; }
+.pos-row__drift { font-size: 11px; min-width: 45px; text-align: right; flex: 1; }
+.pos-row__badge { flex-shrink: 0; }
+.pos-row__badge .badge { font-size: 9px; padding: 3px 8px; letter-spacing: 0.5px; }
+
 footer { margin-top: 24px; text-align: center; font-size: 11px; color: #475569; }

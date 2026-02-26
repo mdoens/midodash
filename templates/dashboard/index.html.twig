@@ -174,12 +174,37 @@
                     {% endfor %}
                 </div>
                 <div class="inner-panel">
-                    <div style="font-size: 11px; font-weight: 700; color: var(--text-label); margin-bottom: 8px; letter-spacing: 1px;">DEPLOYMENT PROTOCOL</div>
-                    {% for dp in deployment_protocol %}
-                    <div class="deploy-step {{ crisisCount >= dp.level ? 'deploy-step--active' : 'deploy-step--inactive' }}">
+                    <div style="font-size: 11px; font-weight: 700; color: var(--text-label); margin-bottom: 8px; letter-spacing: 1px;">
+                        DEPLOYMENT PROTOCOL
+                        {% if crisisCount == 0 %}
+                            <span class="text-green" style="font-weight: 600; letter-spacing: 0;">— Geen actie nodig</span>
+                        {% else %}
+                            <span class="text-red" style="font-weight: 600; letter-spacing: 0;">— ACTIE VEREIST</span>
+                        {% endif %}
+                    </div>
+                    {% set ddCheck = dd <= -15 %}
+                    {% set level1Active = crisisCount >= 1 and ddCheck %}
+                    {% set level2Active = crisisCount >= 2 %}
+                    {% set levels = [
+                        { level: 1, active: level1Active, condition: '1/3 signalen + DD>15%', amount: 25000, source: 'XEON',
+                          action: 'Verkoop €25.000 XEON → koop AVWC + AVWS pro rata' },
+                        { level: 2, active: level2Active, condition: '2/3 signalen', amount: 45000, source: 'XEON + IBGS',
+                          action: 'Verkoop €45.000 (XEON rest + IBGS) → koop AVWC + NT World (Saxo)' },
+                        { level: 3, active: false, condition: '30d: 2/3 nog actief', amount: 45000, source: 'IBGS',
+                          action: 'Verkoop €45.000 IBGS → koop NT World + NT EM (Saxo FBI)' },
+                        { level: 4, active: false, condition: '30d: 3/3 (systeem)', amount: 0, source: 'IBGS volledig',
+                          action: 'Restant IBGS volledig naar equity' },
+                    ] %}
+                    {% for dp in levels %}
+                    <div class="deploy-step {{ dp.active ? 'deploy-step--active' : 'deploy-step--inactive' }}">
                         <span class="deploy-step__num">{{ dp.level }}</span>
-                        <span style="font-size: 11px; color: var(--text-label); flex: 1;">{{ dp.condition }}</span>
-                        <span style="font-size: 11px; font-weight: 700; color: {{ crisisCount >= dp.level ? 'var(--red)' : 'var(--text-muted)' }};">
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-size: 11px; color: var(--text-label);">{{ dp.condition }}</div>
+                            {% if dp.active %}
+                            <div style="font-size: 10px; color: var(--green); margin-top: 2px; font-weight: 600;">→ {{ dp.action }}</div>
+                            {% endif %}
+                        </div>
+                        <span style="font-size: 11px; font-weight: 700; flex-shrink: 0; color: {{ dp.active ? 'var(--red)' : 'var(--text-muted)' }};">
                             {{ dp.amount > 0 ? _self.fmtEur(dp.amount) : 'Restant' }}
                         </span>
                     </div>
@@ -222,25 +247,37 @@
                 </div>
                 {% endif %}
 
-                <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 1.5px; margin-bottom: 8px;">ALLE POSITIES VS TARGET</div>
+                <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 1.5px; margin-bottom: 8px;">V8.0 POSITIES</div>
                 {% for name, p in positions_by_drift %}
                 {% if p.target > 0 %}
-                <div class="flex items-center gap-8" style="padding: 5px 0; border-bottom: 1px solid rgba(148,163,184,0.06);">
-                    <span style="font-size: 12px; width: 90px;" class="fw-600 {{ p.status == 'ONTBREEKT' ? 'text-muted' : 'text-label' }}">{{ name }}</span>
-                    <div class="flex-1">
-                        {% set absDrift = p.drift|abs %}
-                        {% set barColor = absDrift >= 5 ? '#ef4444' : (absDrift >= 3 ? '#eab308' : '#22c55e') %}
-                        {{ _self.miniBar(p.current_pct, 30, barColor) }}
-                    </div>
-                    <span style="font-size: 11px; width: 35px; text-align: right;" class="fw-700 mono">{{ p.current_pct|number_format(1) }}%</span>
-                    <span style="font-size: 10px; width: 30px; text-align: right;" class="text-muted">{{ p.target }}%</span>
+                <div class="pos-row">
+                    <span class="pos-row__name {{ p.status == 'ONTBREEKT' ? 'text-muted' : 'text-label' }}">{{ name }}</span>
+                    <span class="pos-row__pct mono fw-700">{{ p.current_pct|number_format(1) }}%</span>
+                    <span class="pos-row__target text-muted">/ {{ p.target }}%</span>
                     {% set absDrift = p.drift|abs %}
-                    <span style="font-size: 11px; width: 55px; text-align: right;" class="fw-700 {{ absDrift >= 5 ? 'text-red' : (absDrift >= 3 ? 'text-yellow' : 'text-green') }}">
+                    <span class="pos-row__drift fw-700 {{ absDrift >= 5 ? 'text-red' : (absDrift >= 3 ? 'text-yellow' : 'text-green') }}">
                         {{ p.drift >= 0 ? '+' : '' }}{{ p.drift|number_format(1) }}pp
                     </span>
-                    <span style="width: 60px; text-align: right;">{{ _self.statusBadge(p.status) }}</span>
+                    <span class="pos-row__badge">{{ _self.statusBadge(p.status) }}</span>
                 </div>
                 {% endif %}
+                {% endfor %}
+                {# Legacy posities (target 0%, nog in portefeuille) #}
+                {% set hasLegacy = false %}
+                {% for name, p in allocation.positions %}
+                    {% if p.target == 0 and p.value > 0 %}
+                        {% if not hasLegacy %}
+                            <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 1.5px; margin: 12px 0 8px;">LEGACY (VERKOPEN)</div>
+                            {% set hasLegacy = true %}
+                        {% endif %}
+                        <div class="pos-row" style="opacity: 0.6;">
+                            <span class="pos-row__name text-muted">{{ name }}</span>
+                            <span class="pos-row__pct mono fw-600 text-muted">{{ p.current_pct|number_format(1) }}%</span>
+                            <span class="pos-row__target text-muted">{{ _self.fmtEur(p.value) }}</span>
+                            <span class="pos-row__drift"></span>
+                            <span class="pos-row__badge"><span class="badge badge--yellow" style="font-size: 9px;">SELL</span></span>
+                        </div>
+                    {% endif %}
                 {% endfor %}
             </div>
         </div>
