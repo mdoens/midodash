@@ -186,12 +186,31 @@ class PortfolioService
                     }
                 }
 
-                if ($targetName !== null && isset($positions[$targetName])) {
-                    $value = (float) ($pos['exposure'] ?? ($pos['amount'] * ($pos['current_price'] ?? 0)));
-                    $positions[$targetName]['units'] += (float) ($pos['amount'] ?? 0);
-                    $positions[$targetName]['value'] += $value;
-                    $positions[$targetName]['pl'] += (float) ($pos['pnl_base'] ?? $pos['pnl'] ?? 0);
-                    $positions[$targetName]['matched'] = true;
+                // Use symbol as fallback name if no mapping found
+                $posName = $targetName ?? ($description !== '' ? $description : $symbol);
+                $value = (float) ($pos['exposure'] ?? ($pos['amount'] * ($pos['current_price'] ?? 0)));
+                $pl = (float) ($pos['pnl_base'] ?? $pos['pnl'] ?? 0);
+
+                if (isset($positions[$posName])) {
+                    $positions[$posName]['units'] += (float) ($pos['amount'] ?? 0);
+                    $positions[$posName]['value'] += $value;
+                    $positions[$posName]['pl'] += $pl;
+                    $positions[$posName]['matched'] = true;
+                } else {
+                    // Legacy/unmatched Saxo position — still count in portfolio total
+                    $positions[$posName] = [
+                        'name' => $posName,
+                        'target' => 0,
+                        'ticker' => $symbol,
+                        'platform' => 'Saxo',
+                        'asset_class' => 'equity',
+                        'units' => (float) ($pos['amount'] ?? 0),
+                        'value' => $value,
+                        'pl' => $pl,
+                        'pl_pct' => 0.0,
+                        'matched' => true,
+                        'extra' => true,
+                    ];
                 }
             }
         }
