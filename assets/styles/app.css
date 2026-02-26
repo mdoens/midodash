@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   MIDO Command Center v6.5 — Dark Glass Design
+   MIDO Command Center v8.0 — Dark Glass Design
    ═══════════════════════════════════════════════════════════════════ */
 
 :root {
@@ -75,15 +75,25 @@ body {
 @media (max-width: 1000px) {
     .grid--2, .grid--3, .grid--4, .grid--5 { grid-template-columns: 1fr; }
 }
+@media (max-width: 480px) {
+    .container { padding: 16px 12px; }
+    .header__title { font-size: 22px; }
+    .tabs { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab { padding: 8px 14px; font-size: 12px; white-space: nowrap; }
+    .stat__value { font-size: 20px; }
+    .glass { padding: 16px; }
+}
 
 /* ── Header ── */
-.header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; flex-wrap: wrap; gap: 12px; }
+.header { margin-bottom: 24px; }
 .header__title {
-    font-size: 28px; font-weight: 800; letter-spacing: -0.5px;
+    font-size: 28px; font-weight: 800; letter-spacing: -0.5px; white-space: nowrap;
     background: linear-gradient(135deg, #e2e8f0, #94a3b8);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
 }
-.header__sub { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
+.header__meta { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.header__sub { color: var(--text-muted); font-size: 13px; }
 .header__badges { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
 /* ── Badge ── */

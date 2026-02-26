@@ -54,9 +54,10 @@
 
 {# ── HEADER ── #}
 <div class="header">
-    <div>
-        <div class="flex items-center gap-12">
-            <h1 class="header__title">MIDO Command Center</h1>
+    <h1 class="header__title">MIDO Command Center</h1>
+    <div class="header__meta">
+        <p class="header__sub">Strategie v8.0 — {{ "now"|date("d M Y H:i") }}</p>
+        <div class="header__badges">
             {% if crisisCount == 0 %}
                 <span class="badge badge--green">GEEN ACTIE</span>
             {% elseif crisisCount == 1 %}
@@ -64,15 +65,12 @@
             {% else %}
                 <span class="badge badge--red">NIVEAU {{ crisisCount >= 3 ? 4 : crisisCount }}</span>
             {% endif %}
+            {% if not saxo_authenticated %}
+                <a href="{{ path('saxo_login') }}" class="btn btn--primary">Saxo Inloggen</a>
+            {% else %}
+                <span class="badge badge--green">Saxo verbonden</span>
+            {% endif %}
         </div>
-        <p class="header__sub">Strategie v8.0 — {{ "now"|date("d M Y H:i") }}</p>
-    </div>
-    <div class="header__badges">
-        {% if not saxo_authenticated %}
-            <a href="{{ path('saxo_login') }}" class="btn btn--primary">Saxo Inloggen</a>
-        {% else %}
-            <span class="badge badge--green">Saxo verbonden</span>
-        {% endif %}
     </div>
 </div>
 
@@ -97,18 +95,18 @@
         <div class="glass stat">
             <div class="stat__label">Equity</div>
             <div class="stat__value {{ eq.in_band ?? true ? 'text-green' : 'text-yellow' }}">{{ (eq.current_pct ?? 0)|number_format(1) }}%</div>
-            <div class="stat__sub {{ eq.in_band ?? true ? 'text-green' : 'text-yellow' }}">Target: 67% | {{ eq.in_band ?? true ? '✓ In band' : '⚠ Buiten band' }}</div>
+            <div class="stat__sub {{ eq.in_band ?? true ? 'text-green' : 'text-yellow' }}">Target: {{ eq.target ?? 75 }}% | {{ eq.in_band ?? true ? '✓ In band' : '⚠ Buiten band' }}</div>
         </div>
         {% set fi = allocation.asset_classes.fixed_income ?? {} %}
         <div class="glass stat">
             <div class="stat__label">Vastrentend</div>
             <div class="stat__value {{ fi.in_band ?? true ? 'text-green' : 'text-yellow' }}">{{ (fi.current_pct ?? 0)|number_format(1) }}%</div>
-            <div class="stat__sub {{ fi.in_band ?? true ? 'text-green' : 'text-yellow' }}">Target: 23% | {{ fi.in_band ?? true ? '✓ In band' : '⚠ Buiten band' }}</div>
+            <div class="stat__sub {{ fi.in_band ?? true ? 'text-green' : 'text-yellow' }}">Target: {{ fi.target ?? 15 }}% | {{ fi.in_band ?? true ? '✓ In band' : '⚠ Buiten band' }}</div>
         </div>
         <div class="glass stat">
             <div class="stat__label">Dry Powder</div>
             <div class="stat__value mono">{{ _self.fmtEur(allocation.dry_powder) }}</div>
-            <div class="stat__sub">Crisis Niv.1: {{ _self.fmtEur(35000) }}</div>
+            <div class="stat__sub">Crisis Niv.1: {{ _self.fmtEur(25000) }}</div>
         </div>
         <div class="glass stat">
             <div class="stat__label">Regime</div>
