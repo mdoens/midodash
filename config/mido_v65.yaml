@@ -106,9 +106,9 @@ mido:
         portfolio_value: 1800000
         positions:
             IWDA.AS:  { name: 'NT World (proxy)',          target: 0.40, type: equity,       platform: Saxo, fbi: true,  proxy: 'IWDA.AS als proxy (zelfde index)', actual: 'Northern Trust World Custom ESG' }
-            AVWC.L:   { name: 'Avantis Global Equity',     target: 0.15, type: equity,       platform: IBKR, fbi: false }
+            AVWC.DE:  { name: 'Avantis Global Equity',     target: 0.15, type: equity,       platform: IBKR, fbi: false }
             IEMA.AS:  { name: 'NT EM (proxy)',             target: 0.10, type: equity,       platform: Saxo, fbi: true,  proxy: 'IEMA.AS als proxy (zelfde index)', actual: 'Northern Trust EM Custom ESG' }
-            AVWS.L:   { name: 'Avantis Global SCV',        target: 0.10, type: equity,       platform: IBKR, fbi: false }
+            AVWS.DE:  { name: 'Avantis Global SCV',        target: 0.10, type: equity,       platform: IBKR, fbi: false }
             IBGS.AS:  { name: 'iShares EUR Govt 1-3yr',    target: 0.10, type: fixed_income, platform: IBKR, fbi: false }
             SGLD.L:   { name: 'Invesco Physical Gold',     target: 0.07, type: alternatief,  platform: IBKR, fbi: false }
             XEON.DE:  { name: 'Xtrackers EUR Overnight',   target: 0.05, type: cash,         platform: IBKR, fbi: false }
