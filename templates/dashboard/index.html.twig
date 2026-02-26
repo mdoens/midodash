@@ -65,9 +65,9 @@
                 <span class="badge badge--red">NIVEAU {{ crisisCount >= 3 ? 4 : crisisCount }}</span>
             {% endif %}
         </div>
-        <p class="header__sub">Strategie v6.5 — {{ "now"|date("d M Y H:i") }}</p>
+        <p class="header__sub">Strategie v8.0 — {{ "now"|date("d M Y H:i") }}</p>
     </div>
-    <div class="flex gap-8 items-center">
+    <div class="header__badges">
         {% if not saxo_authenticated %}
             <a href="{{ path('saxo_login') }}" class="btn btn--primary">Saxo Inloggen</a>
         {% else %}

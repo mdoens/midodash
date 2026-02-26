@@ -77,13 +77,14 @@ body {
 }
 
 /* ── Header ── */
-.header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; }
+.header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; flex-wrap: wrap; gap: 12px; }
 .header__title {
     font-size: 28px; font-weight: 800; letter-spacing: -0.5px;
     background: linear-gradient(135deg, #e2e8f0, #94a3b8);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
 }
 .header__sub { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
+.header__badges { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
 /* ── Badge ── */
 .badge { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 1px; display: inline-block; }
