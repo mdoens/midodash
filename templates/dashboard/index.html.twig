@@ -159,7 +159,7 @@
 
             {# ── Crisis Protocol ── #}
             <div class="glass {{ crisisCount > 0 ? 'glass--red' : 'glass--green' }}">
-                <div class="section-label"><span class="section-label__text">Crisis Protocol v6.5</span></div>
+                <div class="section-label"><span class="section-label__text">Crisis Protocol v8.0</span></div>
                 <div class="grid grid--3 mb-16">
                     {% set signals = [
                         { label: 'PRIJS', sub: 'IWDA ' ~ (dd|number_format(1)) ~ '%', trigger: '< -20%', color: priceColor },
@@ -253,7 +253,7 @@
        ════════════════════════════════════════════════════════════════ #}
     <div class="tab-panel" data-tabs-target="panel" data-panel="positions">
         <div class="glass mb-16">
-            <div class="section-label"><span class="section-label__text">Alle Posities vs v6.5 Targets</span></div>
+            <div class="section-label"><span class="section-label__text">Alle Posities vs v8.0 Targets</span></div>
             <div style="overflow-x: auto;">
                 <table>
                     <thead>
@@ -425,7 +425,7 @@
         <div class="grid grid--2">
             {# Radar Chart #}
             <div class="glass">
-                <div class="section-label"><span class="section-label__text">Factor Exposure v6.5</span></div>
+                <div class="section-label"><span class="section-label__text">Factor Exposure v8.0</span></div>
                 <div class="chart-wrap chart-wrap--h280">
                     {{ render_chart(radar_chart) }}
                 </div>

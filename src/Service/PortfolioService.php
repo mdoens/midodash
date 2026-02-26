@@ -76,7 +76,7 @@ class PortfolioService
     }
 
     /**
-     * Match live positions from IB/Saxo to v6.5 targets and calculate allocations.
+     * Match live positions from IB/Saxo to v8.0 targets and calculate allocations.
      *
      * @param array<int, array<string, mixed>> $ibPositions
      * @param array<int, array<string, mixed>>|null $saxoPositions
@@ -133,7 +133,7 @@ class PortfolioService
                 $positions[$targetName]['pl'] += (float) ($pos['pnl'] ?? $pos['value'] - ($pos['cost'] ?? $pos['value']));
                 $positions[$targetName]['matched'] = true;
             } else {
-                // Unmatched IB position (not in v6.5 targets) — show as extra
+                // Unmatched IB position (not in v8.0 targets) — show as extra
                 $value = (float) ($pos['value'] ?? 0);
                 $pl = (float) ($pos['pnl'] ?? 0);
                 if (!isset($positions[$targetName])) {

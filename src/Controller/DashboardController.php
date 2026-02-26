@@ -158,7 +158,7 @@ class DashboardController extends AbstractController
         ), $ibPositions);
         $logger->info('IB positions loaded', ['count' => count($ibPositions), 'symbols' => $ibSymbols]);
 
-        // ── Portfolio allocation (v6.5) ──
+        // ── Portfolio allocation (v8.0) ──
         $allocation = $portfolioService->calculateAllocations(
             $ibPositions,
             $saxoPositions,
@@ -353,7 +353,7 @@ class DashboardController extends AbstractController
         $chart->setData([
             'labels' => array_column($factorData, 'factor'),
             'datasets' => [[
-                'label' => 'v6.5',
+                'label' => 'v8.0',
                 'data' => array_column($factorData, 'score'),
                 'borderColor' => '#3b82f6',
                 'backgroundColor' => 'rgba(59, 130, 246, 0.2)',
