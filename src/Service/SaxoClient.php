@@ -57,6 +57,11 @@ class SaxoClient
             ],
         ]);
 
+        $statusCode = $response->getStatusCode();
+        if ($statusCode >= 500) {
+            throw new \RuntimeException('Saxo token endpoint returned HTTP ' . $statusCode);
+        }
+
         $tokens = $response->toArray(false);
 
         if (!isset($tokens['access_token'])) {
@@ -91,10 +96,17 @@ class SaxoClient
                 ],
             ]);
 
+            $statusCode = $response->getStatusCode();
+            if ($statusCode >= 500) {
+                $this->logger->error('Saxo token endpoint returned server error', ['status' => $statusCode]);
+
+                return null;
+            }
+
             $newTokens = $response->toArray(false);
 
             if (!isset($newTokens['access_token'])) {
-                $this->logger->warning('Saxo token refresh returned no access_token');
+                $this->logger->warning('Saxo token refresh returned no access_token', ['response' => $newTokens]);
 
                 return null;
             }
