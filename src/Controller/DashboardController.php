@@ -29,6 +29,30 @@ use Symfony\UX\Chartjs\Model\Chart;
 
 class DashboardController extends AbstractController
 {
+    #[Route('/health/returns', name: 'health_returns')]
+    public function debugHealth(
+        ReturnsService $returnsService,
+        LoggerInterface $logger,
+    ): JsonResponse {
+        $checks = [];
+
+        try {
+            $returns = $returnsService->getPortfolioReturns(['total_portfolio' => 0, 'positions' => []]);
+            $checks['returns'] = 'OK: deposits=' . $returns['total_deposits'];
+        } catch (\Throwable $e) {
+            $checks['returns'] = 'ERROR: ' . $e->getMessage();
+        }
+
+        try {
+            $monthly = $returnsService->getMonthlyOverview();
+            $checks['monthly'] = 'OK: ' . count($monthly) . ' months';
+        } catch (\Throwable $e) {
+            $checks['monthly'] = 'ERROR: ' . $e->getMessage();
+        }
+
+        return $this->json($checks);
+    }
+
     #[Route('/', name: 'dashboard')]
     public function index(
         IbClient $ibClient,
