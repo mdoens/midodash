@@ -18,6 +18,7 @@ services:
             string $saxoTokenEndpoint: '%env(SAXO_TOKEN_ENDPOINT)%'
             string $saxoApiBase: '%env(SAXO_API_BASE)%'
             string $fredApiKey: '%fred_api_key%'
+            string $mcpApiTokens: '%env(MCP_API_TOKENS)%'
 
     App\:
         resource: '../src/'

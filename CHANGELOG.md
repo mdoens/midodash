@@ -14,6 +14,7 @@
 
 ### Changed
 - Orders tabel: "Aantal" kolom vervangen door "Waarde" kolom
+- Bearer token authenticatie op MCP endpoints (`/mcp`, `/mcp/info`) — meerdere tokens ondersteund via `MCP_API_TOKENS` env var
 - IB/Saxo data timestamps in dashboard header (IB: datum/tijd, Saxo: live status)
 - `/health/ib` endpoint voor IB data diagnostiek
 - CLAUDE.md: changelog bijhouden is nu verplicht bij elke deploy

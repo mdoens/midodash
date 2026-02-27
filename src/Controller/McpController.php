@@ -39,6 +39,9 @@ class McpController extends AbstractController
     private const CRISIS_VIX_SUSTAINED_DAYS = 3;
     private const CRISIS_CREDIT_THRESHOLD = 500;
 
+    /** @var list<string> */
+    private readonly array $apiTokens;
+
     public function __construct(
         private readonly McpProtocolService $mcpProtocol,
         private readonly McpDashboardService $dashboard,
@@ -48,11 +51,19 @@ class McpController extends AbstractController
         private readonly CrisisService $crisis,
         private readonly MarketDataService $marketData,
         private readonly CacheInterface $cache,
-    ) {}
+        string $mcpApiTokens,
+    ) {
+        $this->apiTokens = array_filter(array_map('trim', explode(',', $mcpApiTokens)));
+    }
 
     #[Route('/mcp/info', name: 'mcp_info', methods: ['GET'])]
-    public function info(): JsonResponse
+    public function info(Request $request): Response
     {
+        $authError = $this->validateBearerToken($request);
+        if ($authError !== null) {
+            return $authError;
+        }
+
         return $this->corsResponse($this->json([
             'name' => 'MIDO Macro Economic MCP Server',
             'version' => '2.0.0',
@@ -84,6 +95,11 @@ class McpController extends AbstractController
             return $this->corsResponse(new Response('', 204));
         }
 
+        $authError = $this->validateBearerToken($request);
+        if ($authError !== null) {
+            return $authError;
+        }
+
         $originValidation = $this->validateOrigin($request);
         if ($originValidation !== null) {
             return $originValidation;
@@ -106,6 +122,34 @@ class McpController extends AbstractController
             'id' => null,
             'error' => ['code' => -32600, 'message' => 'Method not allowed. Use GET, POST, or DELETE.'],
         ], 405));
+    }
+
+    private function validateBearerToken(Request $request): ?Response
+    {
+        // No tokens configured = auth disabled (backwards compatible)
+        if ($this->apiTokens === []) {
+            return null;
+        }
+
+        $authHeader = $request->headers->get('Authorization', '');
+        if (!str_starts_with($authHeader, 'Bearer ')) {
+            return $this->corsResponse($this->json([
+                'jsonrpc' => '2.0',
+                'id' => null,
+                'error' => ['code' => -32600, 'message' => 'Authorization required. Use: Authorization: Bearer <token>'],
+            ], 401));
+        }
+
+        $token = substr($authHeader, 7);
+        if (!in_array($token, $this->apiTokens, true)) {
+            return $this->corsResponse($this->json([
+                'jsonrpc' => '2.0',
+                'id' => null,
+                'error' => ['code' => -32600, 'message' => 'Invalid bearer token'],
+            ], 403));
+        }
+
+        return null;
     }
 
     private function validateOrigin(Request $request): ?Response
@@ -631,7 +675,7 @@ class McpController extends AbstractController
     {
         $response->headers->set('Access-Control-Allow-Origin', '*');
         $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-        $response->headers->set('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id, Last-Event-ID');
+        $response->headers->set('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, Mcp-Session-Id, Last-Event-ID');
         $response->headers->set('Access-Control-Expose-Headers', 'Mcp-Session-Id');
         $response->headers->set('Access-Control-Max-Age', '86400');
 
