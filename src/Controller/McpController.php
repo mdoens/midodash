@@ -366,11 +366,9 @@ class McpController extends AbstractController
         if ($session === $notFound || !is_array($session)) {
             $this->cache->delete($cacheKey);
 
-            return $this->corsResponse($this->json([
-                'jsonrpc' => '2.0',
-                'id' => null,
-                'error' => ['code' => -32600, 'message' => 'Session not found or expired. Please reinitialize.'],
-            ], 404));
+            // Allow request to proceed — stale session IDs should not block clients
+            // that don't properly reinitialize (e.g. mcp-remote)
+            return null;
         }
 
         $this->cache->delete($cacheKey);
