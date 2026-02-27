@@ -236,7 +236,11 @@ class SaxoClient
             }
 
             $data = $response->toArray(false);
-            $this->logger->info('Saxo historical trades fetched', ['count' => count($data['Data'] ?? [])]);
+            $this->logger->info('Saxo historical trades fetched', [
+                'status' => $response->getStatusCode(),
+                'count' => count($data['Data'] ?? []),
+                'keys' => array_keys($data),
+            ]);
 
             return $data['Data'] ?? [];
         } catch (\Throwable $e) {

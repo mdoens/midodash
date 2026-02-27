@@ -143,8 +143,13 @@ class DashboardController extends AbstractController
             } else {
                 $trades = $saxoClient->getHistoricalTrades();
                 if ($trades === null) {
-                    $result['saxo'] = 'Could not fetch trades';
+                    $result['saxo'] = 'Could not fetch trades (null)';
+                } elseif ($trades === []) {
+                    $result['saxo'] = 'Empty trade list — API returned 0 trades';
+                    $result['saxo_debug'] = 'Try /cs/v1/audit/orderactivities or check if trades exist in Saxo';
                 } else {
+                    $result['saxo_count'] = count($trades);
+                    $result['saxo_sample'] = array_keys($trades[0] ?? []);
                     $r = $importService->importFromSaxoOrders($trades);
                     $result['saxo'] = sprintf('%d imported, %d skipped', $r['imported'], $r['skipped']);
                 }
