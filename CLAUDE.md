@@ -131,6 +131,52 @@ php bin/console cache:clear
 
 ---
 
+## MCP Server
+
+### Endpoints
+- `POST /mcp` — MCP JSON-RPC requests
+- `GET /mcp` — MCP SSE stream for server notifications
+- `DELETE /mcp` — Terminate MCP session
+- `GET /mcp/info` — Server info page
+
+### Authentication
+- Bearer token via `Authorization: Bearer <token>` header
+- Tokens configured via `MCP_API_TOKENS` env var (comma-separated for multiple users)
+- Empty `MCP_API_TOKENS` = auth disabled (backwards compatible)
+- Tokens stored in `.env.local` (local) and Coolify env vars (production)
+
+### Tools (6)
+- `mido_macro_dashboard` — Full macro economic dashboard
+- `mido_indicator` — Individual indicator lookup
+- `mido_triggers` — Strategy trigger evaluation
+- `mido_crisis_dashboard` — Crisis signal status
+- `mido_drawdown_calculator` — Market drawdown calculation
+- `mido_momentum_rebalancing` — ETF momentum rebalancing report
+
+### Claude Desktop Configuration
+Claude Desktop gebruikt `mcp-remote` als stdio proxy voor remote HTTP servers:
+```json
+{
+  "mido": {
+    "command": "npx",
+    "args": [
+      "-y", "mcp-remote",
+      "https://mido.barcelona2.doens.nl/mcp",
+      "--header", "Authorization: Bearer <MCP_TOKEN>"
+    ]
+  }
+}
+```
+Config bestand: `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+### Claude Code Configuration
+```bash
+claude mcp add --transport http mido https://mido.barcelona2.doens.nl/mcp \
+  --header "Authorization: Bearer <MCP_TOKEN>"
+```
+
+---
+
 ## Workflow Orchestration
 
 ### 1. Plan Mode Default
