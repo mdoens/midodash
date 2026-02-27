@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\Service\Mcp;
 
 use App\Service\FredApiService;
+use App\Service\IbClient;
+use App\Service\PortfolioService;
+use App\Service\SaxoClient;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Yaml\Yaml;
@@ -15,10 +18,28 @@ class McpMomentumService
     /** @var array<string, mixed> */
     private array $config;
 
+    /**
+     * Mapping from Yahoo Finance momentum ticker to v8.0 portfolio position name.
+     *
+     * @var array<string, string>
+     */
+    private const TICKER_TO_PORTFOLIO = [
+        'IWDA.AS' => 'NT World',
+        'AVWC.DE' => 'AVWC',
+        'IEMA.AS' => 'NT EM',
+        'AVWS.DE' => 'AVWS',
+        'IBGS.AS' => 'IBGS',
+        'SGLD.L'  => 'EGLN',
+        'XEON.DE' => 'XEON',
+    ];
+
     public function __construct(
         private readonly FredApiService $fredApi,
         private readonly HttpClientInterface $httpClient,
         private readonly LoggerInterface $logger,
+        private readonly IbClient $ibClient,
+        private readonly SaxoClient $saxoClient,
+        private readonly PortfolioService $portfolioService,
         #[Autowire('%kernel.project_dir%')] private readonly string $projectDir,
     ) {
         $this->loadConfig();
@@ -57,18 +78,26 @@ class McpMomentumService
         ];
     }
 
+    /**
+     * @return string|array<string, mixed>
+     */
     public function generateReport(string $format = 'markdown', ?float $portfolioValue = null): string|array
     {
-        $portfolioValue = $portfolioValue ?? (float) $this->config['portfolio_value'];
         $scores = $this->calculateMomentumScores();
         $regime = $this->checkRegime();
-        $advice = $this->generateAdvice($scores, $regime, $portfolioValue);
+        $liveDrift = $this->fetchLiveDrift();
+        $portfolioValue = $liveDrift['total_portfolio'] > 0
+            ? $liveDrift['total_portfolio']
+            : ($portfolioValue ?? (float) $this->config['portfolio_value']);
+
+        $advice = $this->generateAdvice($scores, $regime, $portfolioValue, $liveDrift);
 
         if ($format === 'json') {
             return [
                 'strategy_version' => 'v8.0',
                 'date' => date('Y-m-d'),
                 'portfolio_value' => $portfolioValue,
+                'live_data_available' => $liveDrift['live'],
                 'regime' => $regime,
                 'momentum_scores' => $scores,
                 'advice' => $advice,
@@ -77,6 +106,140 @@ class McpMomentumService
         }
 
         return $this->formatMarkdown($scores, $regime, $advice, $portfolioValue);
+    }
+
+    /**
+     * Fetch live positions from IB + Saxo and calculate drift per position.
+     *
+     * @return array{live: bool, total_portfolio: float, drifts: array<string, array{current_pct: float, drift_pct: float, value: float}>}
+     */
+    private function fetchLiveDrift(): array
+    {
+        $result = ['live' => false, 'total_portfolio' => 0.0, 'drifts' => []];
+
+        try {
+            $ibPositions = $this->ibClient->getPositions();
+            $ibCash = $this->ibClient->getCashReport();
+            $ibCashBalance = (float) ($ibCash['ending_cash'] ?? 0);
+
+            $saxoPositions = null;
+            $saxoCashBalance = 0.0;
+            if ($this->saxoClient->isAuthenticated()) {
+                $saxoPositions = $this->saxoClient->getPositions();
+                $saxoBalance = $this->saxoClient->getAccountBalance();
+                $saxoCashBalance = (float) ($saxoBalance['CashBalance'] ?? 0);
+            }
+
+            $allocation = $this->portfolioService->calculateAllocations(
+                $ibPositions,
+                $saxoPositions,
+                $ibCashBalance,
+                $saxoCashBalance,
+            );
+
+            $result['live'] = true;
+            $result['total_portfolio'] = $allocation['total_portfolio'];
+
+            foreach ($allocation['positions'] as $name => $pos) {
+                $result['drifts'][$name] = [
+                    'current_pct' => round((float) ($pos['current_pct'] ?? 0), 2),
+                    'drift_pct' => round((float) ($pos['drift'] ?? 0), 2),
+                    'value' => (float) ($pos['value'] ?? 0),
+                ];
+            }
+
+            $this->logger->info('MCP Momentum: live drift data loaded', [
+                'total' => $allocation['total_portfolio'],
+                'positions' => count($result['drifts']),
+            ]);
+        } catch (\Throwable $e) {
+            $this->logger->warning('MCP Momentum: live drift fetch failed, using targets only', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Apply the 6 drift x momentum decision rules from spec 4.2c-e.
+     *
+     * Rules (absolute drift in percentage points):
+     * 1. HARDCAP:            |drift| >= 7%  -> REBALANCE_VOLLEDIG (regardless of momentum)
+     * 2. LARGE_DRIFT_NEG:    5% <= |drift| < 7%, momentum < 0 -> REBALANCE_VOLLEDIG
+     * 3. LARGE_DRIFT_POS:    5% <= |drift| < 7%, momentum >= 0 -> REBALANCE_GEDEELTELIJK (50% of excess)
+     * 4. MODERATE_DRIFT_NEG: 3% <= |drift| < 5%, momentum < 0 -> REBALANCE_VOLLEDIG
+     * 5. MODERATE_DRIFT_POS: 3% <= |drift| < 5%, momentum >= 0 -> WACHT (momentum favorable)
+     * 6. WITHIN_BAND:        |drift| < 3%  -> GEEN_ACTIE
+     *
+     * In BEAR_BEVESTIGD regime, bandwidths shift: normaal->verruimd, verruimd->maximaal.
+     *
+     * @return array{rule: string, action: string, rebalance_fraction: float, reason: string}
+     */
+    private function applyDriftMomentumRule(
+        float $absDrift,
+        float $driftPct,
+        ?float $momentumScore,
+        float $activeBandwidth,
+        bool $fbi,
+        string $type,
+    ): array {
+        $hardcapPct = 7.0;
+        $largeDriftPct = 5.0;
+        $moderateDriftPct = $activeBandwidth * 100;
+        $isPositiveMomentum = ($momentumScore ?? 0) >= 0;
+
+        if ($absDrift >= $hardcapPct) {
+            return [
+                'rule' => 'HARDCAP',
+                'action' => 'REBALANCE_VOLLEDIG',
+                'rebalance_fraction' => 1.0,
+                'reason' => sprintf('Drift %.1f%% overschrijdt hardcap ±%.0f%% — volledig herbalanceren', $driftPct, $hardcapPct),
+            ];
+        }
+
+        if ($absDrift >= $largeDriftPct) {
+            if (!$isPositiveMomentum) {
+                return [
+                    'rule' => 'LARGE_DRIFT_NEG',
+                    'action' => 'REBALANCE_VOLLEDIG',
+                    'rebalance_fraction' => 1.0,
+                    'reason' => sprintf('Grote drift %.1f%% + negatief momentum (%.3f) — volledig herbalanceren', $driftPct, $momentumScore ?? 0),
+                ];
+            }
+
+            return [
+                'rule' => 'LARGE_DRIFT_POS',
+                'action' => 'REBALANCE_GEDEELTELIJK',
+                'rebalance_fraction' => 0.5,
+                'reason' => sprintf('Grote drift %.1f%% maar positief momentum (%.3f) — 50%% van excess herbalanceren', $driftPct, $momentumScore ?? 0),
+            ];
+        }
+
+        if ($absDrift >= $moderateDriftPct) {
+            if (!$isPositiveMomentum) {
+                return [
+                    'rule' => 'MODERATE_DRIFT_NEG',
+                    'action' => 'REBALANCE_VOLLEDIG',
+                    'rebalance_fraction' => 1.0,
+                    'reason' => sprintf('Drift %.1f%% buiten band ±%.1f%% + negatief momentum (%.3f) — volledig herbalanceren', $driftPct, $moderateDriftPct, $momentumScore ?? 0),
+                ];
+            }
+
+            return [
+                'rule' => 'MODERATE_DRIFT_POS',
+                'action' => 'WACHT',
+                'rebalance_fraction' => 0.0,
+                'reason' => sprintf('Drift %.1f%% buiten band ±%.1f%% maar positief momentum (%.3f) — afwachten', $driftPct, $moderateDriftPct, $momentumScore ?? 0),
+            ];
+        }
+
+        return [
+            'rule' => 'WITHIN_BAND',
+            'action' => 'GEEN_ACTIE',
+            'rebalance_fraction' => 0.0,
+            'reason' => sprintf('Drift %.1f%% binnen band ±%.1f%% — geen actie nodig', $driftPct, $moderateDriftPct),
+        ];
     }
 
     /**
@@ -201,9 +364,14 @@ class McpMomentumService
     }
 
     /**
+     * Generate advice using drift x momentum decision matrix (spec 4.2c-e).
+     *
+     * @param array<string, array<string, mixed>> $scores
+     * @param array<string, mixed> $regime
+     * @param array{live: bool, total_portfolio: float, drifts: array<string, array{current_pct: float, drift_pct: float, value: float}>} $liveDrift
      * @return array<string, mixed>
      */
-    public function generateAdvice(array $scores, array $regime, float $portfolioValue): array
+    public function generateAdvice(array $scores, array $regime, float $portfolioValue, array $liveDrift = []): array
     {
         $regimeType = $regime['regime'];
         $bandwidths = $this->config['bandwidths'];
@@ -216,12 +384,13 @@ class McpMomentumService
         };
 
         $bandwidthLabel = match ($regimeType) {
-            'BULL' => 'normaal',
-            'BEAR' => 'verruimd',
-            'BEAR_BEVESTIGD' => 'maximaal',
-            default => 'normaal',
+            'BULL' => sprintf('normaal +/-%s%%', round($bandwidths['normaal'] * 100, 0)),
+            'BEAR' => sprintf('verruimd +/-%s%%', round($bandwidths['verruimd'] * 100, 0)),
+            'BEAR_BEVESTIGD' => sprintf('maximaal +/-%s%%', round($bandwidths['maximaal'] * 100, 0)),
+            default => sprintf('normaal +/-%s%%', round($bandwidths['normaal'] * 100, 0)),
         };
 
+        $hasLiveData = !empty($liveDrift['live']);
         $advice = [];
 
         foreach ($this->config['positions'] as $ticker => $position) {
@@ -230,99 +399,139 @@ class McpMomentumService
             $type = $position['type'];
             $fbi = (bool) ($position['fbi'] ?? false);
 
-            $adjustedTarget = $target;
-            $action = 'HOUDEN';
-            $reason = '';
+            $portfolioName = self::TICKER_TO_PORTFOLIO[$ticker] ?? null;
+            $driftPct = 0.0;
+            $currentPct = $target * 100;
+            $currentValue = $portfolioValue * $target;
 
-            if ($score !== null) {
-                if ($regimeType === 'BEAR_BEVESTIGD') {
-                    if ($type === 'equity') {
-                        $adjustedTarget = max($target - $activeBandwidth, 0.0);
-                        $action = 'VERLAGEN';
-                        $reason = 'Defensief protocol actief — equity verlagen';
-                    } elseif (in_array($type, ['cash', 'fixed_income'], true)) {
-                        $adjustedTarget = $target + ($activeBandwidth / 2);
-                        $action = 'VERHOGEN';
-                        $reason = 'Defensief protocol — veilige havens verhogen';
-                    }
-                } elseif ($regimeType === 'BEAR') {
-                    if ($type === 'equity' && $score < 0) {
-                        $adjustedTarget = max($target - ($activeBandwidth / 2), 0.0);
-                        $action = 'VERLAGEN';
-                        $reason = 'Negatief momentum in bear regime';
-                    } elseif ($type === 'equity' && $score > 0) {
-                        $action = 'HOUDEN';
-                        $reason = 'Positief momentum — target handhaven';
-                    }
+            if ($hasLiveData && $portfolioName !== null && isset($liveDrift['drifts'][$portfolioName])) {
+                $driftData = $liveDrift['drifts'][$portfolioName];
+                $driftPct = $driftData['drift_pct'];
+                $currentPct = $driftData['current_pct'];
+                $currentValue = $driftData['value'];
+            }
+
+            $absDrift = abs($driftPct);
+            $targetValue = (int) round($portfolioValue * $target);
+            $excessValue = $currentValue - $targetValue;
+
+            $rule = $this->applyDriftMomentumRule($absDrift, $driftPct, $score, $activeBandwidth, $fbi, $type);
+
+            $sellAmount = 0;
+            $buyAmount = 0;
+            $destination = null;
+
+            if ($rule['rebalance_fraction'] > 0 && abs($excessValue) > 100) {
+                $rebalAmount = $excessValue * $rule['rebalance_fraction'];
+                if ($rebalAmount > 0) {
+                    $sellAmount = (int) round($rebalAmount);
+                    $destination = $this->determineDestination($type, $regimeType);
                 } else {
-                    if ($type === 'equity' && $score > 0.5) {
-                        $adjustedTarget = min($target + ($activeBandwidth / 2), 1.0);
-                        $action = 'VERHOGEN';
-                        $reason = 'Sterk positief momentum in bull markt';
-                    } elseif ($type === 'equity' && $score < -0.3) {
-                        $adjustedTarget = max($target - ($activeBandwidth / 2), 0.0);
-                        $action = 'VERLAGEN';
-                        $reason = 'Negatief momentum ondanks bull markt';
-                    } else {
-                        $reason = 'Momentum neutraal — target handhaven';
-                    }
+                    $buyAmount = (int) round(abs($rebalAmount));
                 }
-            } else {
-                $reason = 'Geen momentum score beschikbaar';
             }
 
-            if ($fbi && $action === 'VERHOGEN') {
-                $reason .= ' (Let op: FBI-beperking — niet aankopen, alleen houden/verkopen)';
-                $adjustedTarget = min($adjustedTarget, $target);
-                $action = $adjustedTarget < $target ? 'VERLAGEN' : 'HOUDEN';
+            // FBI constraint: never buy FBI positions
+            if ($fbi && $buyAmount > 0) {
+                $buyAmount = 0;
+                $rule['action'] = 'HOUDEN';
+                $rule['rule'] .= '+FBI';
+                $rule['reason'] .= ' | FBI-beperking: niet aankopen, alleen houden/verkopen';
             }
 
-            $targetValue = (int) round($portfolioValue * $adjustedTarget);
-            $lowerBound = (int) round($portfolioValue * max($adjustedTarget - $activeBandwidth, 0.0));
-            $upperBound = (int) round($portfolioValue * min($adjustedTarget + $activeBandwidth, 1.0));
+            // BEAR_BEVESTIGD regime override for equity: shift to defensive
+            if ($regimeType === 'BEAR_BEVESTIGD' && $type === 'equity' && $rule['action'] === 'GEEN_ACTIE') {
+                $rule['action'] = 'MONITOR';
+                $rule['reason'] .= ' | Bear bevestigd: equity defensief monitoren';
+            }
 
             $advice[$ticker] = [
                 'ticker' => $ticker,
                 'name' => $position['name'],
+                'portfolio_name' => $portfolioName,
                 'type' => $type,
                 'platform' => $position['platform'],
                 'fbi' => $fbi,
                 'strategic_target' => round($target * 100, 1),
-                'adjusted_target' => round($adjustedTarget * 100, 1),
+                'current_pct' => round($currentPct, 1),
                 'target_value' => $targetValue,
-                'lower_bound' => $lowerBound,
-                'upper_bound' => $upperBound,
-                'action' => $action,
-                'reason' => $reason,
+                'current_value' => (int) round($currentValue),
+                'drift_pct' => round($driftPct, 1),
+                'rule_applied' => $rule['rule'],
+                'action' => $rule['action'],
+                'reason' => $rule['reason'],
+                'bandwidth_active' => $bandwidthLabel,
+                'bandwidth_exceeded' => $absDrift >= ($activeBandwidth * 100),
+                'sell_amount' => $sellAmount,
+                'buy_amount' => $buyAmount,
+                'destination' => $destination,
                 'momentum_score' => $score,
+                'live_data' => $hasLiveData,
             ];
         }
 
+        // Crypto entry (no momentum scoring, no live drift matching)
         $cryptoConfig = $this->config['crypto'];
         $cryptoTarget = (float) $cryptoConfig['target'];
         $cryptoBandwidth = (float) $cryptoConfig['bandwidth'];
 
+        $cryptoDrift = 0.0;
+        $cryptoCurrentPct = $cryptoTarget * 100;
+        $cryptoValue = $portfolioValue * $cryptoTarget;
+        if ($hasLiveData && isset($liveDrift['drifts']['Crypto'])) {
+            $cryptoDrift = $liveDrift['drifts']['Crypto']['drift_pct'];
+            $cryptoCurrentPct = $liveDrift['drifts']['Crypto']['current_pct'];
+            $cryptoValue = $liveDrift['drifts']['Crypto']['value'];
+        }
+
         $advice['CRYPTO'] = [
             'ticker' => 'BTC/WETH/SOL',
             'name' => 'Crypto ETP',
+            'portfolio_name' => 'Crypto',
             'type' => 'crypto',
             'platform' => 'IBKR',
             'fbi' => false,
             'strategic_target' => round($cryptoTarget * 100, 1),
-            'adjusted_target' => round($cryptoTarget * 100, 1),
+            'current_pct' => round($cryptoCurrentPct, 1),
             'target_value' => (int) round($portfolioValue * $cryptoTarget),
-            'lower_bound' => (int) round($portfolioValue * max($cryptoTarget - $cryptoBandwidth, 0.0)),
-            'upper_bound' => (int) round($portfolioValue * ($cryptoTarget + $cryptoBandwidth)),
+            'current_value' => (int) round($cryptoValue),
+            'drift_pct' => round($cryptoDrift, 1),
+            'rule_applied' => 'N/A',
             'action' => 'HOUDEN',
             'reason' => 'Geen momentum scoring — strategisch target handhaven',
+            'bandwidth_active' => $bandwidthLabel,
+            'bandwidth_exceeded' => abs($cryptoDrift) >= ($cryptoBandwidth * 100),
+            'sell_amount' => 0,
+            'buy_amount' => 0,
+            'destination' => null,
             'momentum_score' => null,
+            'live_data' => $hasLiveData,
         ];
 
         return [
             'bandwidth_regime' => $bandwidthLabel,
             'bandwidth_pct' => round($activeBandwidth * 100, 1),
+            'live_data_available' => $hasLiveData,
             'positions' => $advice,
         ];
+    }
+
+    /**
+     * Determine where proceeds from selling should go.
+     */
+    private function determineDestination(string $sourceType, string $regime): string
+    {
+        if ($regime === 'BEAR_BEVESTIGD') {
+            return 'XEON (cash buffer — defensief protocol)';
+        }
+
+        return match ($sourceType) {
+            'equity' => 'Ondergewogen equity positie of XEON',
+            'fixed_income' => 'Ondergewogen equity positie',
+            'alternatief' => 'XEON of ondergewogen positie',
+            'cash' => 'Ondergewogen equity/FI positie',
+            default => 'XEON',
+        };
     }
 
     private function formatMarkdown(array $scores, array $regime, array $advice, float $portfolioValue): string
@@ -335,9 +544,11 @@ class McpMomentumService
             default => '⚪',
         };
 
+        $liveLabel = ($advice['live_data_available'] ?? false) ? 'LIVE' : 'ESTIMATED';
+
         $md = "# MIDO Momentum Rebalancing Report (v8.0)\n";
         $md .= "**Datum:** {$date}  \n";
-        $md .= '**Portefeuille waarde:** €' . number_format($portfolioValue, 0, ',', '.') . "\n\n";
+        $md .= '**Portefeuille waarde:** €' . number_format($portfolioValue, 0, ',', '.') . " ({$liveLabel})\n\n";
 
         $md .= "## Marktregime\n\n";
         $md .= "| Indicator | Waarde |\n";
@@ -350,7 +561,7 @@ class McpMomentumService
         if ($regime['vix'] !== null) {
             $md .= "| VIX | {$regime['vix']} ({$regime['vix_date']}) |\n";
         }
-        $md .= "| Bandwidth | **{$advice['bandwidth_regime']}** ({$advice['bandwidth_pct']}%) |\n";
+        $md .= "| Bandwidth | **{$advice['bandwidth_regime']}** |\n";
         $md .= "\n";
 
         $md .= "## Momentum Scores\n\n";
@@ -369,22 +580,38 @@ class McpMomentumService
         }
         $md .= "\n";
 
-        $md .= "## Herbalanceringsadvies\n\n";
-        $md .= "| Ticker | Actie | Strat. % | Adj. % | Target EUR | Bandbreedte EUR | Reden |\n";
-        $md .= "|--------|-------|--------:|---------:|---------:|--------------:|-------|\n";
+        $md .= "## Drift x Momentum Beslismatrix\n\n";
+        $md .= "| Ticker | Drift | Regel | Actie | Verkoop | Aankoop | Bestemming |\n";
+        $md .= "|--------|------:|-------|-------|--------:|--------:|-----------|\n";
 
         foreach ($advice['positions'] as $pos) {
-            $actionEmoji = match ($pos['action']) {
-                'VERHOGEN' => '🔼',
-                'VERLAGEN' => '🔽',
-                'HOUDEN' => '➡️',
-                default => '',
+            $driftStr = sprintf('%+.1f%%', $pos['drift_pct']);
+            $sellStr = $pos['sell_amount'] > 0 ? '€' . number_format($pos['sell_amount'], 0, ',', '.') : '—';
+            $buyStr = $pos['buy_amount'] > 0 ? '€' . number_format($pos['buy_amount'], 0, ',', '.') : '—';
+            $destStr = $pos['destination'] ?? '—';
+            $fbiStr = $pos['fbi'] ? ' 🏛️' : '';
+            $actionEmoji = match (true) {
+                str_contains($pos['action'], 'REBALANCE') => '🔄',
+                $pos['action'] === 'WACHT' => '⏳',
+                $pos['action'] === 'MONITOR' => '👁️',
+                $pos['action'] === 'HOUDEN' => '➡️',
+                default => '✅',
             };
+
+            $md .= "| {$pos['ticker']}{$fbiStr} | {$driftStr} | {$pos['rule_applied']} | {$actionEmoji} {$pos['action']} | {$sellStr} | {$buyStr} | {$destStr} |\n";
+        }
+        $md .= "\n";
+
+        $md .= "## Herbalanceringsadvies\n\n";
+        $md .= "| Ticker | Strat. % | Huidig % | Target EUR | Huidig EUR | Reden |\n";
+        $md .= "|--------|--------:|---------:|---------:|---------:|-------|\n";
+
+        foreach ($advice['positions'] as $pos) {
             $targetStr = '€' . number_format($pos['target_value'], 0, ',', '.');
-            $bandStr = '€' . number_format($pos['lower_bound'], 0, ',', '.') . ' – €' . number_format($pos['upper_bound'], 0, ',', '.');
+            $currentStr = '€' . number_format($pos['current_value'], 0, ',', '.');
             $fbiStr = $pos['fbi'] ? ' 🏛️' : '';
 
-            $md .= "| {$pos['ticker']}{$fbiStr} | {$actionEmoji} {$pos['action']} | {$pos['strategic_target']}% | {$pos['adjusted_target']}% | {$targetStr} | {$bandStr} | {$pos['reason']} |\n";
+            $md .= "| {$pos['ticker']}{$fbiStr} | {$pos['strategic_target']}% | {$pos['current_pct']}% | {$targetStr} | {$currentStr} | {$pos['reason']} |\n";
         }
         $md .= "\n";
 
@@ -403,6 +630,8 @@ class McpMomentumService
         }
 
         $md .= "---\n";
+        $md .= "**Beslisregels:** HARDCAP (|drift|>=7%), LARGE_DRIFT (5-7%), MODERATE_DRIFT (band-5%), WITHIN_BAND (<band)  \n";
+        $md .= "**Momentum richting:** _NEG = negatief momentum -> agressiever herbalanceren, _POS = positief -> afwachten  \n";
         if (array_filter(array_column($this->config['positions'], 'fbi'))) {
             $md .= "🏛️ = FBI-beperking (niet aankopen, alleen houden/verkopen)  \n";
         }
