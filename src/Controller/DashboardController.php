@@ -32,22 +32,53 @@ class DashboardController extends AbstractController
     #[Route('/health/returns', name: 'health_returns')]
     public function debugHealth(
         ReturnsService $returnsService,
+        DashboardCacheService $dashboardCache,
+        PortfolioSnapshotService $snapshotService,
+        ChartBuilderInterface $chartBuilder,
         LoggerInterface $logger,
     ): JsonResponse {
         $checks = [];
 
         try {
             $returns = $returnsService->getPortfolioReturns(['total_portfolio' => 0, 'positions' => []]);
-            $checks['returns'] = 'OK: deposits=' . $returns['total_deposits'];
+            $checks['returns_service'] = 'OK: deposits=' . $returns['total_deposits'];
         } catch (\Throwable $e) {
-            $checks['returns'] = 'ERROR: ' . $e->getMessage();
+            $checks['returns_service'] = 'ERROR: ' . $e->getMessage();
         }
 
         try {
-            $monthly = $returnsService->getMonthlyOverview();
-            $checks['monthly'] = 'OK: ' . count($monthly) . ' months';
+            $cached = $dashboardCache->load();
+            $checks['cache'] = $cached !== null ? 'OK: cached' : 'OK: no cache';
         } catch (\Throwable $e) {
-            $checks['monthly'] = 'ERROR: ' . $e->getMessage();
+            $checks['cache'] = 'ERROR: ' . $e->getMessage();
+        }
+
+        try {
+            $history = $snapshotService->getHistory(365);
+            $checks['history'] = 'OK: ' . count($history) . ' snapshots';
+            if (count($history) > 1) {
+                $this->buildHistoryChart($chartBuilder, $history);
+                $checks['history_chart'] = 'OK';
+            }
+        } catch (\Throwable $e) {
+            $checks['history'] = 'ERROR: ' . $e->getMessage();
+        }
+
+        // Try full render pipeline
+        if ($cached !== null) {
+            try {
+                $cached['pie_chart'] = $this->buildAssetClassPieChart($chartBuilder, $cached['allocation']);
+                $checks['pie_chart'] = 'OK';
+            } catch (\Throwable $e) {
+                $checks['pie_chart'] = 'ERROR: ' . $e->getMessage();
+            }
+
+            try {
+                $cached['performance_chart'] = $this->buildPerformanceChart($chartBuilder, $cached['allocation']['positions']);
+                $checks['perf_chart'] = 'OK';
+            } catch (\Throwable $e) {
+                $checks['perf_chart'] = 'ERROR: ' . $e->getMessage();
+            }
         }
 
         return $this->json($checks);
