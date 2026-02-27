@@ -155,10 +155,7 @@ class DashboardController extends AbstractController
                 $type = (string) ($tx['TransactionType'] ?? 'MISSING');
                 $cashTxTypes[$type] = ($cashTxTypes[$type] ?? 0) + 1;
                 if (!isset($cashTxSample[$type])) {
-                    $cashTxSample[$type] = array_intersect_key($tx, array_flip([
-                        'TransactionType', 'TransactionSubType', 'Amount', 'Currency',
-                        'InstrumentDescription', 'Symbol', 'AccountValueDate',
-                    ]));
+                    $cashTxSample[$type] = $tx;
                 }
             }
         }
