@@ -61,7 +61,20 @@ class TransactionImportCommand extends Command
             } else {
                 $result = $this->importService->importFromSaxoOrders($trades);
                 $output->writeln(sprintf(
-                    '<info>Saxo: %d imported, %d skipped (already exists)</info>',
+                    '<info>Saxo trades: %d imported, %d skipped</info>',
+                    $result['imported'],
+                    $result['skipped'],
+                ));
+            }
+
+            // Saxo cash transactions (dividends, deposits, interest, etc.)
+            $cashTxs = $this->saxoClient->getCashTransactions();
+            if ($cashTxs === null) {
+                $output->writeln('<comment>Could not fetch Saxo cash transactions.</comment>');
+            } else {
+                $result = $this->importService->importFromSaxoCashTransactions($cashTxs);
+                $output->writeln(sprintf(
+                    '<info>Saxo cash: %d imported, %d skipped</info>',
                     $result['imported'],
                     $result['skipped'],
                 ));

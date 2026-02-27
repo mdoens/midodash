@@ -299,6 +299,84 @@ class SaxoClient
     }
 
     /**
+     * Fetch cash transactions (dividends, interest, fees, deposits) from Saxo.
+     * Uses /hist/v1/transactions endpoint.
+     *
+     * @return list<array<string, mixed>>|null
+     */
+    public function getCashTransactions(): ?array
+    {
+        $token = $this->getValidToken();
+        if ($token === null) {
+            return null;
+        }
+
+        $clientKey = $this->getClientKey();
+        if ($clientKey === null) {
+            return null;
+        }
+
+        try {
+            $fromDate = (new \DateTimeImmutable('-24 months'))->format('Y-m-d');
+            $toDate = (new \DateTimeImmutable('+1 day'))->format('Y-m-d');
+
+            $url = $this->saxoApiBase . '/hist/v1/transactions';
+
+            $response = $this->httpClient->request('GET', $url, [
+                'headers' => ['Authorization' => 'Bearer ' . $token],
+                'query' => [
+                    'ClientKey' => $clientKey,
+                    'FromDate' => $fromDate,
+                    'ToDate' => $toDate,
+                    '$top' => 1000,
+                ],
+            ]);
+
+            if ($response->getStatusCode() === 401) {
+                $refreshed = $this->refreshToken();
+                if ($refreshed === null) {
+                    return null;
+                }
+
+                $response = $this->httpClient->request('GET', $url, [
+                    'headers' => ['Authorization' => 'Bearer ' . $refreshed['access_token']],
+                    'query' => [
+                        'ClientKey' => $clientKey,
+                        'FromDate' => $fromDate,
+                        'ToDate' => $toDate,
+                        '$top' => 1000,
+                    ],
+                ]);
+
+                if ($response->getStatusCode() === 401) {
+                    $this->logger->error('Saxo cash transactions: still 401 after token refresh');
+
+                    return null;
+                }
+            }
+
+            $statusCode = $response->getStatusCode();
+            if ($statusCode >= 400) {
+                $this->logger->warning('Saxo cash transactions returned HTTP ' . $statusCode);
+
+                return null;
+            }
+
+            $data = $response->toArray(false);
+            $this->logger->info('Saxo cash transactions fetched', [
+                'count' => count($data['Data'] ?? []),
+                'keys' => array_keys($data),
+            ]);
+
+            return $data['Data'] ?? [];
+        } catch (\Throwable $e) {
+            $this->logger->error('Saxo cash transactions fetch failed', ['error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    /**
      * Fetch open/working orders from Saxo.
      *
      * @return list<array{order_id: string, symbol: string, description: string, buy_sell: string, amount: float, order_type: string, price: float, duration: string, status: string}>|null

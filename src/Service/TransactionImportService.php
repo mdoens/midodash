@@ -334,4 +334,95 @@ class TransactionImportService
 
         return ['imported' => $imported, 'skipped' => $skipped];
     }
+
+    /**
+     * Import cash transactions from Saxo /hist/v1/transactions endpoint.
+     * These include dividends, interest, fees, deposits, withdrawals.
+     *
+     * @param list<array<string, mixed>> $transactions from Saxo API
+     *
+     * @return array{imported: int, skipped: int}
+     */
+    public function importFromSaxoCashTransactions(array $transactions): array
+    {
+        $imported = 0;
+        $skipped = 0;
+
+        foreach ($transactions as $tx) {
+            $externalId = (string) ($tx['TransactionId'] ?? $tx['BookingId'] ?? '');
+            if ($externalId === '') {
+                continue;
+            }
+
+            // Prefix with 'cash_' to avoid collision with trade IDs
+            $externalId = 'cash_' . $externalId;
+
+            if ($this->repository->existsByPlatformAndExternalId('saxo', $externalId)) {
+                $skipped++;
+                continue;
+            }
+
+            $transaction = new Transaction();
+            $transaction->setPlatform('saxo');
+            $transaction->setExternalId($externalId);
+
+            $dateStr = (string) ($tx['AccountValueDate'] ?? $tx['ValueDate'] ?? $tx['ExecutionTime'] ?? '');
+            $transaction->setTradedAt($dateStr !== '' ? new \DateTime($dateStr) : new \DateTime());
+
+            $symbol = (string) ($tx['InstrumentSymbol'] ?? $tx['Symbol'] ?? '');
+            $baseSymbol = str_contains($symbol, ':') ? explode(':', $symbol)[0] : $symbol;
+            $transaction->setSymbol($baseSymbol);
+            $transaction->setPositionName(
+                $this->symbolMap[$baseSymbol] ?? $this->symbolMap[$symbol] ?? (string) ($tx['InstrumentDescription'] ?? $tx['Description'] ?? '')
+            );
+
+            // Map Saxo transaction types
+            $txType = strtolower((string) ($tx['TransactionType'] ?? ''));
+            if (str_contains($txType, 'dividend') || str_contains($txType, 'corporateaction')) {
+                $transaction->setType('dividend');
+            } elseif (str_contains($txType, 'interest')) {
+                $transaction->setType('interest');
+            } elseif (str_contains($txType, 'commission') || str_contains($txType, 'fee')) {
+                $transaction->setType('fee');
+            } elseif (str_contains($txType, 'deposit') || str_contains($txType, 'transfer in') || str_contains($txType, 'cashin')) {
+                $transaction->setType('deposit');
+            } elseif (str_contains($txType, 'withdrawal') || str_contains($txType, 'transfer out') || str_contains($txType, 'cashout')) {
+                $transaction->setType('withdrawal');
+            } elseif (str_contains($txType, 'tax') || str_contains($txType, 'withholding')) {
+                $transaction->setType('tax');
+            } else {
+                // Skip trade-related transactions (already imported via importFromSaxoOrders)
+                if (str_contains($txType, 'trade') || str_contains($txType, 'exercise') || str_contains($txType, 'settlement')) {
+                    continue;
+                }
+                $transaction->setType($txType !== '' ? $txType : 'other');
+            }
+
+            $amount = (float) ($tx['Amount'] ?? $tx['CashAmount'] ?? 0);
+            $transaction->setQuantity('0');
+            $transaction->setPrice('0');
+            $transaction->setAmount((string) $amount);
+
+            $currency = (string) ($tx['Currency'] ?? $tx['AccountCurrency'] ?? 'EUR');
+            $transaction->setCurrency($currency);
+
+            // Saxo transactions are typically in account currency (EUR)
+            $amountInBase = (float) ($tx['AmountAccountCurrency'] ?? $tx['ConvertedAmount'] ?? $amount);
+            $fxRate = $amount != 0.0 ? abs($amountInBase / $amount) : 1.0;
+            $transaction->setFxRate((string) $fxRate);
+            $transaction->setAmountEur((string) $amountInBase);
+            $transaction->setCommission('0');
+
+            $this->em->persist($transaction);
+            $imported++;
+        }
+
+        if ($imported > 0) {
+            $this->em->flush();
+        }
+
+        $this->logger->info('Saxo cash transactions imported', ['imported' => $imported, 'skipped' => $skipped]);
+
+        return ['imported' => $imported, 'skipped' => $skipped];
+    }
 }

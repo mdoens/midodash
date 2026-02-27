@@ -159,15 +159,26 @@ class DashboardController extends AbstractController
             if (!$saxoClient->isAuthenticated()) {
                 $result['saxo'] = 'Not authenticated';
             } else {
+                // Import trades
                 $trades = $saxoClient->getHistoricalTrades();
                 if ($trades === null) {
-                    $result['saxo'] = 'Could not fetch trades (null)';
+                    $result['saxo_trades'] = 'Could not fetch trades (null)';
                 } elseif ($trades === []) {
-                    $result['saxo'] = 'Empty trade list — API returned 0 trades';
+                    $result['saxo_trades'] = 'Empty trade list';
                 } else {
-                    $result['saxo_count'] = count($trades);
                     $r = $importService->importFromSaxoOrders($trades);
-                    $result['saxo'] = sprintf('%d imported, %d skipped', $r['imported'], $r['skipped']);
+                    $result['saxo_trades'] = sprintf('%d imported, %d skipped', $r['imported'], $r['skipped']);
+                }
+
+                // Import cash transactions (dividends, deposits, interest, etc.)
+                $cashTxs = $saxoClient->getCashTransactions();
+                if ($cashTxs === null) {
+                    $result['saxo_cash'] = 'Could not fetch cash transactions (null)';
+                } elseif ($cashTxs === []) {
+                    $result['saxo_cash'] = 'No cash transactions found';
+                } else {
+                    $r = $importService->importFromSaxoCashTransactions($cashTxs);
+                    $result['saxo_cash'] = sprintf('%d imported, %d skipped', $r['imported'], $r['skipped']);
                 }
             }
         } catch (\Throwable $e) {
