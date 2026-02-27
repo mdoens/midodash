@@ -69,10 +69,17 @@ class DashboardController extends AbstractController
                 $cached['allocation_chart'] = $this->buildAllocationHistoryChart($chartBuilder, $history);
             }
 
-            // Returns data from transactions
-            $cached['returns'] = $returnsService->getPortfolioReturns($cached['allocation']);
-            $cached['position_returns'] = $returnsService->getPositionReturns($cached['allocation']);
-            $cached['monthly_overview'] = $returnsService->getMonthlyOverview();
+            // Returns data from transactions (graceful fallback if table empty/missing)
+            try {
+                $cached['returns'] = $returnsService->getPortfolioReturns($cached['allocation']);
+                $cached['position_returns'] = $returnsService->getPositionReturns($cached['allocation']);
+                $cached['monthly_overview'] = $returnsService->getMonthlyOverview();
+            } catch (\Throwable $e) {
+                $logger->error('Returns data failed', ['error' => $e->getMessage()]);
+                $cached['returns'] = [];
+                $cached['position_returns'] = [];
+                $cached['monthly_overview'] = [];
+            }
 
             return $this->render('dashboard/index.html.twig', $cached);
         }
@@ -118,10 +125,17 @@ class DashboardController extends AbstractController
             $data['allocation_chart'] = $this->buildAllocationHistoryChart($chartBuilder, $history);
         }
 
-        // Returns data from transactions
-        $data['returns'] = $returnsService->getPortfolioReturns($data['allocation']);
-        $data['position_returns'] = $returnsService->getPositionReturns($data['allocation']);
-        $data['monthly_overview'] = $returnsService->getMonthlyOverview();
+        // Returns data from transactions (graceful fallback if table empty/missing)
+        try {
+            $data['returns'] = $returnsService->getPortfolioReturns($data['allocation']);
+            $data['position_returns'] = $returnsService->getPositionReturns($data['allocation']);
+            $data['monthly_overview'] = $returnsService->getMonthlyOverview();
+        } catch (\Throwable $e) {
+            $logger->error('Returns data failed', ['error' => $e->getMessage()]);
+            $data['returns'] = [];
+            $data['position_returns'] = [];
+            $data['monthly_overview'] = [];
+        }
 
         return $this->render('dashboard/index.html.twig', $data);
     }

@@ -125,8 +125,9 @@ class ReturnsService
         /** @var string|null $sum */
         $sum = $this->transactionRepository->createQueryBuilder('t')
             ->select('SUM(ABS(t.commission))')
-            ->where('t.type IN (:types)')
-            ->setParameter('types', ['buy', 'sell'])
+            ->where('t.type = :buy OR t.type = :sell')
+            ->setParameter('buy', 'buy')
+            ->setParameter('sell', 'sell')
             ->getQuery()
             ->getSingleScalarResult();
 

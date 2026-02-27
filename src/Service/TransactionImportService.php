@@ -177,10 +177,11 @@ class TransactionImportService
     {
         $updated = 0;
         $conn = $this->em->getConnection();
+        $tableName = $conn->quoteIdentifier('transaction');
 
         foreach ($this->symbolMap as $symbol => $name) {
             $count = $conn->executeStatement(
-                'UPDATE "transaction" SET position_name = :name WHERE symbol = :symbol AND position_name != :name',
+                'UPDATE ' . $tableName . ' SET position_name = :name WHERE symbol = :symbol AND position_name != :name',
                 ['name' => $name, 'symbol' => $symbol],
             );
             $updated += $count;
