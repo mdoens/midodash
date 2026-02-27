@@ -501,7 +501,54 @@
                     <span style="font-size: 12px;" class="fw-700 mono">{{ _self.fmtEur(dp.value) }}</span>
                 </div>
                 {% endfor %}
+                {% if saxo_cash_for_trading|default(0) > 0 %}
+                <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(148,163,184,0.12);">
+                    <div class="flex-between" style="padding: 4px 0;">
+                        <span style="font-size: 11px;" class="text-muted">Saxo vrij voor trading</span>
+                        <span style="font-size: 11px;" class="fw-700 mono">{{ _self.fmtEur(saxo_cash_for_trading) }}</span>
+                    </div>
+                    {% if saxo_cost_to_close|default(0) != 0 %}
+                    <div class="flex-between" style="padding: 4px 0;">
+                        <span style="font-size: 11px;" class="text-muted">Kosten sluiten posities</span>
+                        <span style="font-size: 11px;" class="fw-700 mono text-red">{{ _self.fmtEur(saxo_cost_to_close) }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
             </div>
+
+            {# Valuta Exposure (Saxo) #}
+            {% if saxo_currency_exposure|default([])|length > 0 %}
+            <div class="glass">
+                <div class="section-label"><span class="section-label__text">Valuta Exposure (Saxo)</span></div>
+                {% set totalExposure = 0 %}
+                {% for exp in saxo_currency_exposure %}
+                    {% set totalExposure = totalExposure + exp.amount_base|abs %}
+                {% endfor %}
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="text-align: left;">Valuta</th>
+                                <th style="text-align: right;">Exposure</th>
+                                <th style="text-align: right;">In EUR</th>
+                                <th style="text-align: right;">% Totaal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for exp in saxo_currency_exposure %}
+                            <tr>
+                                <td class="fw-500">{{ exp.currency }}</td>
+                                <td style="text-align: right;" class="mono">{{ exp.amount|number_format(0, ',', '.') }}</td>
+                                <td style="text-align: right;" class="mono">{{ _self.fmtEur(exp.amount_base) }}</td>
+                                <td style="text-align: right;" class="mono">{{ totalExposure > 0 ? ((exp.amount_base|abs / totalExposure) * 100)|number_format(1) : '0.0' }}%</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
 
             {# 5 Vragen #}
             <div class="glass">
@@ -712,6 +759,32 @@
             <div class="glass stat">
                 <div class="stat__label">Commissie</div>
                 <div class="stat__value mono text-red">{{ _self.fmtEur(r.total_commission) }}</div>
+            </div>
+        </div>
+        {% endif %}
+
+        {# ── Saxo Performance Metrics ── #}
+        {% if r.saxo_twr|default(null) is not null %}
+        <div class="grid grid--4 mb-20">
+            <div class="glass stat">
+                <div class="stat__label">TWR (Saxo)</div>
+                <div class="stat__value mono {{ r.saxo_twr >= 0 ? 'text-green' : 'text-red' }}">{{ r.saxo_twr >= 0 ? '+' : '' }}{{ (r.saxo_twr * 100)|number_format(2) }}%</div>
+                <div class="stat__sub">Time-Weighted Return</div>
+            </div>
+            <div class="glass stat">
+                <div class="stat__label">Sharpe Ratio</div>
+                <div class="stat__value mono {{ r.saxo_sharpe >= 1 ? 'text-green' : (r.saxo_sharpe >= 0.5 ? 'text-yellow' : 'text-red') }}">{{ r.saxo_sharpe|number_format(2) }}</div>
+                <div class="stat__sub">{{ r.saxo_sharpe >= 1 ? 'Goed' : (r.saxo_sharpe >= 0.5 ? 'Matig' : 'Laag') }}</div>
+            </div>
+            <div class="glass stat">
+                <div class="stat__label">Sortino Ratio</div>
+                <div class="stat__value mono {{ r.saxo_sortino >= 1 ? 'text-green' : (r.saxo_sortino >= 0.5 ? 'text-yellow' : 'text-red') }}">{{ r.saxo_sortino|number_format(2) }}</div>
+                <div class="stat__sub">Downside risk-adjusted</div>
+            </div>
+            <div class="glass stat">
+                <div class="stat__label">Max Drawdown</div>
+                <div class="stat__value mono text-red">{{ (r.saxo_max_drawdown * 100)|number_format(1) }}%</div>
+                <div class="stat__sub">Maximale daling</div>
             </div>
         </div>
         {% endif %}

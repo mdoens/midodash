@@ -94,6 +94,12 @@ class DashboardController extends AbstractController
 
             try {
                 $cached['saxo_authenticated'] = false;
+                if (!isset($cached['saxo_performance'])) {
+                    $cached['saxo_performance'] = null;
+                }
+                if (!isset($cached['saxo_currency_exposure'])) {
+                    $cached['saxo_currency_exposure'] = [];
+                }
                 $cached['returns'] = $returnsService->getPortfolioReturns($cached['allocation']);
                 $cached['position_returns'] = $returnsService->getPositionReturns($cached['allocation']);
                 $cached['monthly_overview'] = $returnsService->getMonthlyOverview();
@@ -228,9 +234,15 @@ class DashboardController extends AbstractController
             $cached['radar_chart'] = $this->buildFactorRadarChart($chartBuilder, $portfolioService->getFactorData());
             $cached['performance_chart'] = $this->buildPerformanceChart($chartBuilder, $cached['allocation']['positions']);
 
-            // Always check live Saxo auth status + open orders
+            // Always check live Saxo auth status + open orders + performance
             $cached['saxo_authenticated'] = $saxoClient->isAuthenticated();
             $cached['saxo_open_orders'] = $cached['saxo_authenticated'] ? ($saxoClient->getOpenOrders() ?? []) : [];
+            if (!isset($cached['saxo_performance'])) {
+                $cached['saxo_performance'] = null;
+            }
+            if (!isset($cached['saxo_currency_exposure'])) {
+                $cached['saxo_currency_exposure'] = [];
+            }
 
             // Portfolio history for Historie tab
             $history = $snapshotService->getHistory(365);
@@ -369,15 +381,36 @@ class DashboardController extends AbstractController
         $saxoCashBalance = 0.0;
         $saxoAuthenticated = false;
         $saxoOpenOrders = [];
+        $saxoPerformance = null;
+        $saxoCurrencyExposure = [];
+        $saxoCashForTrading = 0.0;
+        $saxoCostToClose = 0.0;
         try {
             $saxoAuthenticated = $saxoClient->isAuthenticated();
             if ($saxoAuthenticated) {
                 $saxoPositions = $saxoClient->getPositions();
                 $saxoBalance = $saxoClient->getAccountBalance();
                 $saxoCashBalance = (float) ($saxoBalance['CashBalance'] ?? 0);
+                $saxoCashForTrading = (float) ($saxoBalance['CashAvailableForTrading'] ?? 0);
+                $saxoCostToClose = (float) ($saxoBalance['CostToClosePositions'] ?? 0);
 
                 // Fetch open orders
                 $saxoOpenOrders = $saxoClient->getOpenOrders() ?? [];
+
+                // Fetch performance metrics + currency exposure (non-critical, graceful fallback)
+                try {
+                    $saxoPerformance = $saxoClient->getPerformanceMetrics();
+                } catch (\Throwable $e) {
+                    $logger->warning('Saxo performance metrics failed', ['error' => $e->getMessage()]);
+                    $saxoPerformance = null;
+                }
+
+                try {
+                    $saxoCurrencyExposure = $saxoClient->getCurrencyExposure() ?? [];
+                } catch (\Throwable $e) {
+                    $logger->warning('Saxo currency exposure failed', ['error' => $e->getMessage()]);
+                    $saxoCurrencyExposure = [];
+                }
 
                 // Log Saxo symbols for debugging mapping (stderr for Coolify visibility)
                 if ($saxoPositions !== null) {
@@ -511,6 +544,10 @@ class DashboardController extends AbstractController
             'ib_from_buffer' => $ibFromBuffer,
             'ib_buffered_at' => $ibBufferedAt?->format('d M Y H:i'),
             'saxo_open_orders' => $saxoOpenOrders,
+            'saxo_performance' => $saxoPerformance,
+            'saxo_currency_exposure' => $saxoCurrencyExposure,
+            'saxo_cash_for_trading' => $saxoCashForTrading,
+            'saxo_cost_to_close' => $saxoCostToClose,
         ];
     }
 

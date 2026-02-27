@@ -5,18 +5,21 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Repository\TransactionRepository;
+use Psr\Log\LoggerInterface;
 
 class ReturnsService
 {
     public function __construct(
         private readonly TransactionRepository $transactionRepository,
+        private readonly SaxoClient $saxoClient,
+        private readonly LoggerInterface $logger,
     ) {
     }
 
     /**
      * @param array<string, mixed> $allocation
      *
-     * @return array{total_deposits: float, total_withdrawals: float, net_deposits: float, current_value: float, total_return: float, total_return_pct: float, total_dividends: float, total_interest: float, total_commission: float}
+     * @return array{total_deposits: float, total_withdrawals: float, net_deposits: float, current_value: float, total_return: float, total_return_pct: float, total_dividends: float, total_interest: float, total_commission: float, saxo_twr: float|null, saxo_sharpe: float|null, saxo_sortino: float|null, saxo_max_drawdown: float|null}
      */
     public function getPortfolioReturns(array $allocation): array
     {
@@ -24,19 +27,29 @@ class ReturnsService
         $ibDeposits = $this->transactionRepository->sumByType('deposit', 'ib');
         $totalWithdrawals = abs($this->transactionRepository->sumByType('withdrawal', 'ib'));
 
-        // Saxo: derive net deposits from allocation (cost basis = value - P/L)
-        // Saxo API doesn't provide cash transaction history, so we approximate:
-        // - Position cost basis = current value minus unrealized P/L
-        // - Cash is included because uninvested cash came from deposits
-        // Note: if positions were sold at profit, cash includes that profit,
-        // slightly overstating deposits. Acceptable for buy-and-hold portfolio.
-        $saxoDeposits = 0.0;
-        foreach ($allocation['positions'] ?? [] as $pos) {
-            if (($pos['platform'] ?? '') === 'Saxo' && ($pos['value'] ?? 0) > 0) {
-                $saxoDeposits += (float) ($pos['value'] ?? 0) - (float) ($pos['pl'] ?? 0);
-            }
+        // Try to use Saxo performance metrics for accurate deposit data
+        $saxoPerformance = null;
+        try {
+            $saxoPerformance = $this->saxoClient->getPerformanceMetrics();
+        } catch (\Throwable $e) {
+            $this->logger->debug('Saxo performance metrics not available', ['error' => $e->getMessage()]);
         }
-        $saxoDeposits += (float) ($allocation['saxo_cash'] ?? 0);
+
+        if ($saxoPerformance !== null && ($saxoPerformance['total_deposited'] ?? 0) > 0) {
+            // Use exact Saxo deposit/withdrawal data from performance API
+            $saxoDeposits = (float) $saxoPerformance['total_deposited'];
+            $saxoWithdrawals = (float) ($saxoPerformance['total_withdrawn'] ?? 0);
+            $totalWithdrawals += $saxoWithdrawals;
+        } else {
+            // Fallback: derive net deposits from allocation (cost basis = value - P/L)
+            $saxoDeposits = 0.0;
+            foreach ($allocation['positions'] ?? [] as $pos) {
+                if (($pos['platform'] ?? '') === 'Saxo' && ($pos['value'] ?? 0) > 0) {
+                    $saxoDeposits += (float) ($pos['value'] ?? 0) - (float) ($pos['pl'] ?? 0);
+                }
+            }
+            $saxoDeposits += (float) ($allocation['saxo_cash'] ?? 0);
+        }
 
         $totalDeposits = $ibDeposits + $saxoDeposits;
         $netDeposits = $totalDeposits - $totalWithdrawals;
@@ -61,6 +74,10 @@ class ReturnsService
             'total_dividends' => $totalDividends,
             'total_interest' => $totalInterest,
             'total_commission' => $totalCommission,
+            'saxo_twr' => $saxoPerformance !== null ? (float) $saxoPerformance['twr'] : null,
+            'saxo_sharpe' => $saxoPerformance !== null ? (float) $saxoPerformance['sharpe_ratio'] : null,
+            'saxo_sortino' => $saxoPerformance !== null ? (float) $saxoPerformance['sortino_ratio'] : null,
+            'saxo_max_drawdown' => $saxoPerformance !== null ? (float) $saxoPerformance['max_drawdown'] : null,
         ];
     }
 
@@ -75,11 +92,14 @@ class ReturnsService
         $sells = $this->transactionRepository->sumSellsBySymbol();
         $dividends = $this->transactionRepository->sumDividendsBySymbol();
 
+        // Fetch Saxo closed positions for accurate realized P/L
+        $closedPl = $this->getClosedPositionProfitLoss();
+
         /** @var array<string, array<string, mixed>> $positions */
         $positions = $allocation['positions'] ?? [];
 
         $result = [];
-        $allNames = array_unique(array_merge(array_keys($buys), array_keys($sells), array_keys($dividends), array_keys($positions)));
+        $allNames = array_unique(array_merge(array_keys($buys), array_keys($sells), array_keys($dividends), array_keys($positions), array_keys($closedPl)));
         sort($allNames);
 
         foreach ($allNames as $name) {
@@ -109,6 +129,11 @@ class ReturnsService
                 $costBasis = $currentValue > 0 ? $currentValue - $livePl : 0.0;
                 $unrealizedPl = $livePl;
                 $totalBought = $costBasis > 0 ? $costBasis : 0.0;
+            }
+
+            // Add Saxo closed position P/L if available and no realized P/L from transactions
+            if ($realizedPl === 0.0 && isset($closedPl[$name])) {
+                $realizedPl = $closedPl[$name];
             }
 
             $totalReturn = $realizedPl + $unrealizedPl + ($dividends[$name] ?? 0.0);
@@ -143,6 +168,43 @@ class ReturnsService
     public function getMonthlyOverview(): array
     {
         return $this->transactionRepository->getMonthlyOverview();
+    }
+
+    /**
+     * Get realized P/L from Saxo closed positions, keyed by position name.
+     *
+     * @return array<string, float>
+     */
+    private function getClosedPositionProfitLoss(): array
+    {
+        try {
+            $closedPositions = $this->saxoClient->getClosedPositions();
+        } catch (\Throwable $e) {
+            $this->logger->debug('Saxo closed positions not available', ['error' => $e->getMessage()]);
+
+            return [];
+        }
+
+        if ($closedPositions === null) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($closedPositions as $pos) {
+            $name = $pos['description'] !== '' ? $pos['description'] : $pos['symbol'];
+            // Strip exchange suffix for matching (e.g. ":xams")
+            $symbol = preg_replace('/:[\w]+$/', '', $pos['symbol']) ?? $pos['symbol'];
+
+            // Use description as key (matches portfolio position names)
+            $key = $name;
+
+            if (!isset($result[$key])) {
+                $result[$key] = 0.0;
+            }
+            $result[$key] += $pos['profit_loss'];
+        }
+
+        return $result;
     }
 
     private function sumTradeCommissions(): float

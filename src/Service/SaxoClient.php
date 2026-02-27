@@ -194,6 +194,7 @@ class SaxoClient
         try {
             $response = $this->httpClient->request('GET', $this->saxoApiBase . '/port/v1/balances/me', [
                 'headers' => ['Authorization' => 'Bearer ' . $token],
+                'query' => ['FieldGroups' => 'CalculateCashForTrading'],
             ]);
 
             $balance = $response->toArray(false);
@@ -454,6 +455,314 @@ class SaxoClient
             return $orders;
         } catch (\Throwable $e) {
             $this->logger->error('Saxo open orders fetch failed', ['error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Fetch closed positions from Saxo.
+     *
+     * @return list<array{symbol: string, description: string, open_price: float, close_price: float, profit_loss: float, amount: float, asset_type: string, open_time: string, close_time: string}>|null
+     */
+    public function getClosedPositions(): ?array
+    {
+        $cached = $this->loadCache();
+        if ($cached !== null && isset($cached['closed_positions'])) {
+            return $cached['closed_positions'];
+        }
+
+        $token = $this->getValidToken();
+        if ($token === null) {
+            return null;
+        }
+
+        try {
+            $response = $this->httpClient->request('GET', $this->saxoApiBase . '/port/v1/closedpositions/me', [
+                'headers' => ['Authorization' => 'Bearer ' . $token],
+                'query' => ['FieldGroups' => 'ClosedPosition,DisplayAndFormat'],
+            ]);
+
+            if ($response->getStatusCode() === 401) {
+                $refreshed = $this->refreshToken();
+                if ($refreshed === null) {
+                    return null;
+                }
+
+                $response = $this->httpClient->request('GET', $this->saxoApiBase . '/port/v1/closedpositions/me', [
+                    'headers' => ['Authorization' => 'Bearer ' . $refreshed['access_token']],
+                    'query' => ['FieldGroups' => 'ClosedPosition,DisplayAndFormat'],
+                ]);
+
+                if ($response->getStatusCode() === 401) {
+                    $this->logger->error('Saxo closed positions: still 401 after token refresh');
+
+                    return null;
+                }
+            }
+
+            $data = $response->toArray(false);
+            $positions = $this->parseClosedPositions($data);
+            $this->updateCache('closed_positions', $positions);
+            $this->dataBuffer->store('saxo', 'closed_positions', $positions);
+            $this->logger->info('Saxo closed positions fetched', ['count' => count($positions)]);
+
+            return $positions;
+        } catch (\Throwable $e) {
+            $this->logger->error('Saxo closed positions fetch failed', ['error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     *
+     * @return list<array{symbol: string, description: string, open_price: float, close_price: float, profit_loss: float, amount: float, asset_type: string, open_time: string, close_time: string}>
+     */
+    public function parseClosedPositions(array $data): array
+    {
+        $positions = [];
+        foreach ($data['Data'] ?? [] as $pos) {
+            $closed = $pos['ClosedPosition'] ?? [];
+            $display = $pos['DisplayAndFormat'] ?? [];
+
+            $positions[] = [
+                'symbol' => (string) ($display['Symbol'] ?? $closed['Symbol'] ?? '?'),
+                'description' => (string) ($display['Description'] ?? $closed['Description'] ?? ''),
+                'open_price' => (float) ($closed['OpenPrice'] ?? 0),
+                'close_price' => (float) ($closed['ClosePrice'] ?? 0),
+                'profit_loss' => (float) ($closed['ClosedProfitLoss'] ?? 0),
+                'amount' => (float) ($closed['Amount'] ?? 0),
+                'asset_type' => (string) ($closed['AssetType'] ?? ''),
+                'open_time' => (string) ($closed['ExecutionTimeOpen'] ?? ''),
+                'close_time' => (string) ($closed['ExecutionTimeClose'] ?? ''),
+            ];
+        }
+
+        return $positions;
+    }
+
+    /**
+     * Fetch performance metrics (TWR, Sharpe, Sortino, MaxDrawDown) from Saxo.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function getPerformanceMetrics(): ?array
+    {
+        $cached = $this->loadCache();
+        if ($cached !== null && isset($cached['performance'])) {
+            return $cached['performance'];
+        }
+
+        $token = $this->getValidToken();
+        if ($token === null) {
+            return null;
+        }
+
+        $clientKey = $this->getClientKey();
+        if ($clientKey === null) {
+            return null;
+        }
+
+        try {
+            $url = $this->saxoApiBase . '/hist/v3/perf/' . urlencode($clientKey);
+
+            $response = $this->httpClient->request('GET', $url, [
+                'headers' => ['Authorization' => 'Bearer ' . $token],
+                'query' => [
+                    'FieldGroups' => 'AccountSummary,TimeWeightedPerformance,BalancePerformance',
+                    'StandardPeriod' => 'AllTime',
+                ],
+            ]);
+
+            if ($response->getStatusCode() === 401) {
+                $refreshed = $this->refreshToken();
+                if ($refreshed === null) {
+                    return null;
+                }
+
+                $response = $this->httpClient->request('GET', $url, [
+                    'headers' => ['Authorization' => 'Bearer ' . $refreshed['access_token']],
+                    'query' => [
+                        'FieldGroups' => 'AccountSummary,TimeWeightedPerformance,BalancePerformance',
+                        'StandardPeriod' => 'AllTime',
+                    ],
+                ]);
+            }
+
+            $statusCode = $response->getStatusCode();
+            if ($statusCode >= 400) {
+                $this->logger->warning('Saxo performance metrics returned HTTP ' . $statusCode);
+
+                return null;
+            }
+
+            $data = $response->toArray(false);
+            $metrics = $this->parsePerformanceMetrics($data);
+            $this->updateCache('performance', $metrics);
+            $this->dataBuffer->store('saxo', 'performance', $metrics);
+            $this->logger->info('Saxo performance metrics fetched');
+
+            return $metrics;
+        } catch (\Throwable $e) {
+            $this->logger->error('Saxo performance metrics fetch failed', ['error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     *
+     * @return array<string, mixed>
+     */
+    public function parsePerformanceMetrics(array $data): array
+    {
+        $twr = $data['TimeWeightedPerformance'] ?? [];
+        $balance = $data['BalancePerformance'] ?? [];
+        $summary = $data['AccountSummary'] ?? [];
+
+        return [
+            'twr' => (float) ($twr['TimeWeightedReturn'] ?? 0),
+            'twr_annualized' => (float) ($twr['TimeWeightedReturnAnnualized'] ?? 0),
+            'sharpe_ratio' => (float) ($twr['SharpeRatio'] ?? 0),
+            'sortino_ratio' => (float) ($twr['SortinoRatio'] ?? 0),
+            'max_drawdown' => (float) ($balance['MaxDrawDown'] ?? $twr['MaxDrawDown'] ?? 0),
+            'total_return_fraction' => (float) ($balance['TotalReturnFraction'] ?? 0),
+            'total_deposited' => (float) ($summary['TotalDeposited'] ?? 0),
+            'total_withdrawn' => (float) ($summary['TotalWithdrawn'] ?? 0),
+            'total_profit_loss' => (float) ($summary['TotalProfitLoss'] ?? 0),
+        ];
+    }
+
+    /**
+     * Fetch currency exposure from Saxo.
+     *
+     * @return list<array{currency: string, amount: float, amount_base: float}>|null
+     */
+    public function getCurrencyExposure(): ?array
+    {
+        $cached = $this->loadCache();
+        if ($cached !== null && isset($cached['currency_exposure'])) {
+            return $cached['currency_exposure'];
+        }
+
+        $token = $this->getValidToken();
+        if ($token === null) {
+            return null;
+        }
+
+        try {
+            $response = $this->httpClient->request('GET', $this->saxoApiBase . '/port/v1/exposure/currency/me', [
+                'headers' => ['Authorization' => 'Bearer ' . $token],
+            ]);
+
+            if ($response->getStatusCode() === 401) {
+                $refreshed = $this->refreshToken();
+                if ($refreshed === null) {
+                    return null;
+                }
+
+                $response = $this->httpClient->request('GET', $this->saxoApiBase . '/port/v1/exposure/currency/me', [
+                    'headers' => ['Authorization' => 'Bearer ' . $refreshed['access_token']],
+                ]);
+
+                if ($response->getStatusCode() === 401) {
+                    $this->logger->error('Saxo currency exposure: still 401 after token refresh');
+
+                    return null;
+                }
+            }
+
+            $data = $response->toArray(false);
+            $exposure = $this->parseCurrencyExposure($data);
+            $this->updateCache('currency_exposure', $exposure);
+            $this->dataBuffer->store('saxo', 'currency_exposure', $exposure);
+            $this->logger->info('Saxo currency exposure fetched', ['count' => count($exposure)]);
+
+            return $exposure;
+        } catch (\Throwable $e) {
+            $this->logger->error('Saxo currency exposure fetch failed', ['error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     *
+     * @return list<array{currency: string, amount: float, amount_base: float}>
+     */
+    public function parseCurrencyExposure(array $data): array
+    {
+        $exposure = [];
+        foreach ($data['Data'] ?? [] as $item) {
+            $exposure[] = [
+                'currency' => (string) ($item['Currency'] ?? '?'),
+                'amount' => (float) ($item['Amount'] ?? 0),
+                'amount_base' => (float) ($item['AmountInCalculationEntityCurrency'] ?? $item['Amount'] ?? 0),
+            ];
+        }
+
+        return $exposure;
+    }
+
+    /**
+     * Fetch historical account values from Saxo.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function getAccountValues(?string $fromDate = null): ?array
+    {
+        $token = $this->getValidToken();
+        if ($token === null) {
+            return null;
+        }
+
+        $clientKey = $this->getClientKey();
+        if ($clientKey === null) {
+            return null;
+        }
+
+        try {
+            $url = $this->saxoApiBase . '/hist/v3/accountvalues/' . urlencode($clientKey);
+            $query = [];
+            if ($fromDate !== null) {
+                $query['FromDate'] = $fromDate;
+            }
+
+            $response = $this->httpClient->request('GET', $url, [
+                'headers' => ['Authorization' => 'Bearer ' . $token],
+                'query' => $query,
+            ]);
+
+            if ($response->getStatusCode() === 401) {
+                $refreshed = $this->refreshToken();
+                if ($refreshed === null) {
+                    return null;
+                }
+
+                $response = $this->httpClient->request('GET', $url, [
+                    'headers' => ['Authorization' => 'Bearer ' . $refreshed['access_token']],
+                    'query' => $query,
+                ]);
+            }
+
+            $statusCode = $response->getStatusCode();
+            if ($statusCode >= 400) {
+                $this->logger->warning('Saxo account values returned HTTP ' . $statusCode);
+
+                return null;
+            }
+
+            $data = $response->toArray(false);
+            $this->dataBuffer->store('saxo', 'account_values', $data);
+            $this->logger->info('Saxo account values fetched');
+
+            return $data;
+        } catch (\Throwable $e) {
+            $this->logger->error('Saxo account values fetch failed', ['error' => $e->getMessage()]);
 
             return null;
         }
