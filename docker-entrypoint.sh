@@ -7,6 +7,15 @@ printenv | grep -vE '^(HOME|PATH|SHELL|USER|LOGNAME|_)=' > /etc/environment
 # Start cron in background
 cron
 
+# Rebuild cache for new code (volume has stale cache from previous deploy)
+echo "Clearing and warming up Symfony cache..."
+php /var/www/html/bin/console cache:clear --env=prod --no-warmup || true
+php /var/www/html/bin/console cache:warmup --env=prod || true
+
+# Ensure sessions dir exists (persistent across deploys)
+mkdir -p /var/www/html/var/sessions
+chown www-data:www-data /var/www/html/var/sessions
+
 # Run database migrations
 echo "Running database migrations..."
 php /var/www/html/bin/console app:db:migrate || true

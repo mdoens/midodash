@@ -51,7 +51,7 @@ RUN sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available
 RUN printf '<Directory /var/www/html/public>\n    AllowOverride All\n    Require all granted\n</Directory>\n' >> /etc/apache2/apache2.conf
 
 # Writable dirs
-RUN mkdir -p var/cache var/log var/share var/data && chown -R www-data:www-data var/
+RUN mkdir -p var/cache var/log var/share var/data var/sessions && chown -R www-data:www-data var/
 
 ENV APP_ENV=prod
 ENV APP_DEBUG=0
