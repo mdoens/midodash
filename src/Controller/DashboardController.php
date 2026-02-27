@@ -456,7 +456,8 @@ class DashboardController extends AbstractController
                     $logger->info($msg);
                     file_put_contents('php://stderr', $msg . "\n");
                 } else {
-                    $saxoAuthenticated = false;
+                    // Don't set saxoAuthenticated=false — tokens may still be valid
+                    // (API could be down, rate limited, or temporary network issue)
                     $logger->warning('Saxo positions returned null despite being authenticated');
                 }
             }

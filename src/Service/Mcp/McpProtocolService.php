@@ -128,6 +128,267 @@ class McpProtocolService
                         ],
                     ],
                 ],
+                // --- MCP v2.0 tools ---
+                [
+                    'name' => 'mido_portfolio_snapshot',
+                    'description' => 'Complete portfolio overview: live positions with prices, weights, P/L, drift vs target, asset class breakdown, platform split, dry powder. Uses live Saxo/IB data with DataBuffer fallback.',
+                    'inputSchema' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'format' => [
+                                'type' => 'string',
+                                'enum' => ['markdown', 'json'],
+                                'default' => 'markdown',
+                                'description' => 'Output format',
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'name' => 'mido_cash_overview',
+                    'description' => 'Cash balances per platform, open orders, dry powder breakdown (cash + XEON + IBGS), deployable capital by timeline.',
+                    'inputSchema' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'format' => [
+                                'type' => 'string',
+                                'enum' => ['markdown', 'json'],
+                                'default' => 'markdown',
+                                'description' => 'Output format',
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'name' => 'mido_currency_exposure',
+                    'description' => 'FX exposure breakdown: currency weights, EUR vs non-EUR split, comparison with geographic targets.',
+                    'inputSchema' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'format' => [
+                                'type' => 'string',
+                                'enum' => ['markdown', 'json'],
+                                'default' => 'markdown',
+                                'description' => 'Output format',
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'name' => 'mido_performance_history',
+                    'description' => 'Portfolio value over time with TWR calculation, peak/trough, regime history. Uses daily portfolio snapshots.',
+                    'inputSchema' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'period' => [
+                                'type' => 'string',
+                                'enum' => ['1m', '3m', '6m', '1y', 'ytd', 'all'],
+                                'default' => '1y',
+                                'description' => 'Lookback period',
+                            ],
+                            'format' => [
+                                'type' => 'string',
+                                'enum' => ['markdown', 'json'],
+                                'default' => 'markdown',
+                                'description' => 'Output format',
+                            ],
+                            'include_benchmark' => [
+                                'type' => 'boolean',
+                                'default' => false,
+                                'description' => 'Include IWDA benchmark comparison (when available)',
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'name' => 'mido_attribution',
+                    'description' => 'Return attribution: contribution per position, asset class, platform, or geography. Shows which positions drove portfolio returns.',
+                    'inputSchema' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'period' => [
+                                'type' => 'string',
+                                'enum' => ['1m', '3m', '6m', '1y', 'ytd', 'all'],
+                                'default' => '3m',
+                                'description' => 'Attribution period',
+                            ],
+                            'group_by' => [
+                                'type' => 'string',
+                                'enum' => ['position', 'asset_class', 'platform', 'geography'],
+                                'default' => 'position',
+                                'description' => 'Grouping dimension',
+                            ],
+                            'format' => [
+                                'type' => 'string',
+                                'enum' => ['markdown', 'json'],
+                                'default' => 'markdown',
+                                'description' => 'Output format',
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'name' => 'mido_risk_metrics',
+                    'description' => 'Portfolio risk analytics: volatility, max drawdown, Sharpe ratio, Sortino ratio, VaR/CVaR (95%). Cross-checked with Saxo performance metrics when available.',
+                    'inputSchema' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'period' => [
+                                'type' => 'string',
+                                'enum' => ['1m', '3m', '6m', '1y', 'ytd', 'all'],
+                                'default' => '1y',
+                                'description' => 'Calculation period',
+                            ],
+                            'format' => [
+                                'type' => 'string',
+                                'enum' => ['markdown', 'json'],
+                                'default' => 'markdown',
+                                'description' => 'Output format',
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'name' => 'mido_stress_test',
+                    'description' => 'Portfolio stress testing with preset scenarios (crash -20%/-40%, rate hike +200bps, EUR/USD parity, stagflation) or custom shocks. Shows impact per position and whether crisis protocol would activate.',
+                    'inputSchema' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'scenario' => [
+                                'type' => 'string',
+                                'enum' => ['crash_20', 'crash_40', 'rate_hike', 'eur_usd_parity', 'stagflation', 'custom'],
+                                'default' => 'crash_20',
+                                'description' => 'Stress scenario to apply',
+                            ],
+                            'custom_shocks' => [
+                                'type' => 'string',
+                                'description' => 'JSON object with custom shocks per asset class or position, e.g. equity:-30, fixed_income:5. Only used when scenario=custom.',
+                            ],
+                            'format' => [
+                                'type' => 'string',
+                                'enum' => ['markdown', 'json'],
+                                'default' => 'markdown',
+                                'description' => 'Output format',
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'name' => 'mido_cost_analysis',
+                    'description' => 'Transaction costs per platform, TER per position, weighted average TER, total cost ratio. Shows the true all-in cost of the portfolio.',
+                    'inputSchema' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'period' => [
+                                'type' => 'string',
+                                'enum' => ['1m', '3m', '6m', '1y', 'all'],
+                                'default' => '1y',
+                                'description' => 'Period for transaction cost analysis',
+                            ],
+                            'format' => [
+                                'type' => 'string',
+                                'enum' => ['markdown', 'json'],
+                                'default' => 'markdown',
+                                'description' => 'Output format',
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'name' => 'mido_fundamentals',
+                    'description' => 'Fund/ETF fundamentals from Yahoo Finance: P/E, dividend yield, expense ratio, AUM, beta, 52-week range. Works for any ticker symbol.',
+                    'inputSchema' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'ticker' => [
+                                'type' => 'string',
+                                'description' => 'Yahoo Finance ticker symbol (e.g. AVWC.DE, IWDA.AS, XEON.DE)',
+                            ],
+                            'format' => [
+                                'type' => 'string',
+                                'enum' => ['markdown', 'json'],
+                                'default' => 'markdown',
+                                'description' => 'Output format',
+                            ],
+                        ],
+                        'required' => ['ticker'],
+                    ],
+                ],
+                [
+                    'name' => 'mido_fund_lookthrough',
+                    'description' => 'ETF/fund look-through: top holdings, sector breakdown, geography per position. Uses Yahoo Finance for IBKR ETFs and static config for Northern Trust funds.',
+                    'inputSchema' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'position' => [
+                                'type' => 'string',
+                                'description' => 'Specific position name (e.g. AVWC, NTWC). Omit for all positions.',
+                            ],
+                            'format' => [
+                                'type' => 'string',
+                                'enum' => ['markdown', 'json'],
+                                'default' => 'markdown',
+                                'description' => 'Output format',
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'name' => 'mido_rebalance_advisor',
+                    'description' => 'Concrete buy/sell orders to reach target allocation. Shows delta per position, platform, FBI warnings for Saxo funds. Optionally include extra cash to deploy.',
+                    'inputSchema' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'cash_to_deploy' => [
+                                'type' => 'number',
+                                'description' => 'Extra cash to deploy (EUR). Added to portfolio value for target calculation.',
+                            ],
+                            'format' => [
+                                'type' => 'string',
+                                'enum' => ['markdown', 'json'],
+                                'default' => 'markdown',
+                                'description' => 'Output format',
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'name' => 'mido_scenario_planner',
+                    'description' => 'Long-term portfolio projection with deterministic path and Monte Carlo simulation (1000 runs). Shows nominal/real end values, percentiles, and milestone targets.',
+                    'inputSchema' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'years' => [
+                                'type' => 'integer',
+                                'default' => 10,
+                                'minimum' => 1,
+                                'maximum' => 50,
+                                'description' => 'Investment horizon in years',
+                            ],
+                            'expected_return_pct' => [
+                                'type' => 'number',
+                                'default' => 7.0,
+                                'description' => 'Expected annual return percentage',
+                            ],
+                            'monthly_contribution' => [
+                                'type' => 'number',
+                                'default' => 0,
+                                'description' => 'Monthly contribution in EUR',
+                            ],
+                            'inflation_pct' => [
+                                'type' => 'number',
+                                'default' => 2.0,
+                                'description' => 'Annual inflation rate percentage',
+                            ],
+                            'format' => [
+                                'type' => 'string',
+                                'enum' => ['markdown', 'json'],
+                                'default' => 'markdown',
+                                'description' => 'Output format',
+                            ],
+                        ],
+                    ],
+                ],
             ],
         ];
     }

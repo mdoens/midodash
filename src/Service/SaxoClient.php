@@ -58,7 +58,7 @@ class SaxoClient
         ]);
 
         $statusCode = $response->getStatusCode();
-        if ($statusCode >= 500) {
+        if ($statusCode >= 400) {
             throw new \RuntimeException('Saxo token endpoint returned HTTP ' . $statusCode);
         }
 
@@ -71,7 +71,11 @@ class SaxoClient
 
         $this->saveTokens($tokens);
         $this->clearCache();
-        $this->logger->info('Saxo token exchange successful');
+        $this->logger->info('Saxo token exchange successful', [
+            'expires_in' => $tokens['expires_in'] ?? 'unknown',
+            'refresh_token_expires_in' => $tokens['refresh_token_expires_in'] ?? 'unknown',
+            'has_refresh_token' => isset($tokens['refresh_token']),
+        ]);
 
         return $tokens;
     }
@@ -81,45 +85,84 @@ class SaxoClient
      */
     public function refreshToken(): ?array
     {
-        $tokens = $this->loadTokens();
-        if ($tokens === null || !isset($tokens['refresh_token'])) {
+        $oldTokens = $this->loadTokens();
+        if ($oldTokens === null || !isset($oldTokens['refresh_token'])) {
             return null;
         }
 
-        try {
-            $response = $this->httpClient->request('POST', $this->saxoTokenEndpoint, [
-                'body' => [
-                    'grant_type' => 'refresh_token',
-                    'client_id' => $this->saxoAppKey,
-                    'client_secret' => $this->saxoAppSecret,
-                    'refresh_token' => $tokens['refresh_token'],
-                ],
-            ]);
+        // Retry up to 2 times on transient failures
+        $maxAttempts = 2;
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            try {
+                $response = $this->httpClient->request('POST', $this->saxoTokenEndpoint, [
+                    'body' => [
+                        'grant_type' => 'refresh_token',
+                        'client_id' => $this->saxoAppKey,
+                        'client_secret' => $this->saxoAppSecret,
+                        'refresh_token' => $oldTokens['refresh_token'],
+                    ],
+                ]);
 
-            $statusCode = $response->getStatusCode();
-            if ($statusCode >= 500) {
-                $this->logger->error('Saxo token endpoint returned server error', ['status' => $statusCode]);
+                $statusCode = $response->getStatusCode();
+
+                // 4xx = client error (invalid/revoked token) — no point retrying
+                if ($statusCode >= 400 && $statusCode < 500) {
+                    $this->logger->warning('Saxo token refresh returned client error', [
+                        'status' => $statusCode,
+                        'attempt' => $attempt,
+                    ]);
+
+                    return null;
+                }
+
+                // 5xx = server error — retry
+                if ($statusCode >= 500) {
+                    $this->logger->error('Saxo token endpoint returned server error', [
+                        'status' => $statusCode,
+                        'attempt' => $attempt,
+                    ]);
+
+                    if ($attempt < $maxAttempts) {
+                        usleep(500_000); // 500ms before retry
+                        continue;
+                    }
+
+                    return null;
+                }
+
+                $newTokens = $response->toArray(false);
+
+                if (!isset($newTokens['access_token'])) {
+                    $this->logger->warning('Saxo token refresh returned no access_token', ['response' => $newTokens]);
+
+                    return null;
+                }
+
+                // Merge: preserve fields from old tokens that Saxo didn't return in the refresh response
+                // This prevents losing refresh_token or refresh_token_expires_in
+                $mergedTokens = array_merge($oldTokens, $newTokens);
+                unset($mergedTokens['created_at']); // Will be set fresh by saveTokens()
+
+                $this->saveTokens($mergedTokens);
+                $this->logger->info('Saxo token refreshed successfully', ['attempt' => $attempt]);
+
+                return $mergedTokens;
+            } catch (\Throwable $e) {
+                $this->logger->error('Saxo token refresh failed', [
+                    'error' => $e->getMessage(),
+                    'attempt' => $attempt,
+                ]);
+
+                if ($attempt < $maxAttempts) {
+                    usleep(500_000);
+                    continue;
+                }
 
                 return null;
             }
-
-            $newTokens = $response->toArray(false);
-
-            if (!isset($newTokens['access_token'])) {
-                $this->logger->warning('Saxo token refresh returned no access_token', ['response' => $newTokens]);
-
-                return null;
-            }
-
-            $this->saveTokens($newTokens);
-            $this->logger->info('Saxo token refreshed successfully');
-
-            return $newTokens;
-        } catch (\Throwable $e) {
-            $this->logger->error('Saxo token refresh failed', ['error' => $e->getMessage()]);
-
-            return null;
         }
+
+        return null;
     }
 
     /**
@@ -817,28 +860,82 @@ class SaxoClient
         }
 
         if (isset($tokens['created_at'], $tokens['expires_in'])) {
-            $expiresAt = (int) $tokens['created_at'] + (int) $tokens['expires_in'];
+            $createdAt = (int) $tokens['created_at'];
+            $expiresIn = (int) $tokens['expires_in'];
+            $expiresAt = $createdAt + $expiresIn;
+            $now = time();
 
-            // Access token still valid — use it regardless of refresh token status
-            if (time() <= $expiresAt - 120) {
+            // Access token fully expired — must refresh
+            if ($now > $expiresAt) {
+                return $this->tryRefreshOrNull($tokens);
+            }
+
+            // Access token still valid
+            $lifetime = $expiresIn;
+            $elapsed = $now - $createdAt;
+            $halfLife = $lifetime / 2;
+
+            // Proactive refresh: when past 50% of lifetime, refresh in background
+            // This prevents the last-minute rush that causes failures
+            if ($elapsed > $halfLife) {
+                $refreshed = $this->tryRefresh($tokens);
+                if ($refreshed !== null) {
+                    return $refreshed['access_token'];
+                }
+
+                // Refresh failed but access token is still valid — use it
                 return $tokens['access_token'];
             }
 
-            // Access token expiring soon — try refresh if refresh token is still valid
-            if (isset($tokens['refresh_token_expires_in'])) {
-                $refreshExpiresAt = (int) $tokens['created_at'] + (int) $tokens['refresh_token_expires_in'];
-                if (time() > $refreshExpiresAt) {
-                    // Both tokens expired — need re-auth
-                    return null;
-                }
-            }
-
-            $refreshed = $this->refreshToken();
-
-            return $refreshed['access_token'] ?? null;
+            // Token is fresh (< 50% lifetime) — use as-is
+            return $tokens['access_token'];
         }
 
+        // No timing info — use token as-is (will get 401 if expired, handled by callers)
         return $tokens['access_token'];
+    }
+
+    /**
+     * Try to refresh, return null if refresh token is also expired (needs re-auth).
+     *
+     * @param array<string, mixed> $tokens
+     */
+    private function tryRefreshOrNull(array $tokens): ?string
+    {
+        if (isset($tokens['refresh_token_expires_in'], $tokens['created_at'])) {
+            $refreshExpiresAt = (int) $tokens['created_at'] + (int) $tokens['refresh_token_expires_in'];
+            if (time() > $refreshExpiresAt) {
+                $this->logger->warning('Saxo: both access and refresh tokens expired, re-auth required');
+
+                return null;
+            }
+        }
+
+        $refreshed = $this->refreshToken();
+
+        return $refreshed['access_token'] ?? null;
+    }
+
+    /**
+     * Try to refresh. Returns new tokens on success, null on failure.
+     * Does NOT return null for expired refresh tokens — caller decides what to do.
+     *
+     * @param array<string, mixed> $tokens
+     * @return array<string, mixed>|null
+     */
+    private function tryRefresh(array $tokens): ?array
+    {
+        // Don't attempt refresh if refresh token is expired
+        if (isset($tokens['refresh_token_expires_in'], $tokens['created_at'])) {
+            $refreshExpiresAt = (int) $tokens['created_at'] + (int) $tokens['refresh_token_expires_in'];
+            if (time() > $refreshExpiresAt) {
+                $this->logger->info('Saxo: refresh token expired, proactive refresh skipped');
+
+                return null;
+            }
+        }
+
+        return $this->refreshToken();
     }
 
     /**

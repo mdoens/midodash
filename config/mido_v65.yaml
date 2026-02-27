@@ -5,14 +5,14 @@ mido:
 
     # v8.0 target allocations — EUR 1.800.000 portfolio
     targets:
-        NTWC:         { target: 40, ticker: 'NTWCEAE.MFU',  platform: Saxo, asset_class: equity, isin: 'NL0011225305' }
-        NTEM:         { target: 10, ticker: 'NTEMESA.MFU',   platform: Saxo, asset_class: equity, isin: 'NL0015417802' }
-        AVWC:         { target: 15, ticker: 'AVWC',          platform: IBKR, asset_class: equity, isin: 'IE00BL0L0H68' }
-        AVWS:         { target: 10, ticker: 'AVWS',          platform: IBKR, asset_class: equity, isin: 'IE000JS6TQ89' }
-        XEON:         { target: 5,  ticker: 'XEON',          platform: IBKR, asset_class: fixed_income, isin: 'LU0290358497' }
-        IBGS:         { target: 10, ticker: 'IBGS',          platform: Saxo, asset_class: fixed_income, isin: 'IE00B14X4Q57' }
-        EGLN:         { target: 7,  ticker: 'EGLN',          platform: IBKR, asset_class: alternatives, isin: 'IE00B579F325' }
-        Crypto:       { target: 3,  ticker: 'BTC1+ETHWEUR+2SCS', platform: IBKR, asset_class: alternatives }
+        NTWC:         { target: 40, ticker: 'NTWCEAE.MFU',  platform: Saxo, asset_class: equity, isin: 'NL0011225305', ter: 0.15 }
+        NTEM:         { target: 10, ticker: 'NTEMESA.MFU',   platform: Saxo, asset_class: equity, isin: 'NL0015417802', ter: 0.25 }
+        AVWC:         { target: 15, ticker: 'AVWC',          platform: IBKR, asset_class: equity, isin: 'IE00BL0L0H68', ter: 0.23 }
+        AVWS:         { target: 10, ticker: 'AVWS',          platform: IBKR, asset_class: equity, isin: 'IE000JS6TQ89', ter: 0.28 }
+        XEON:         { target: 5,  ticker: 'XEON',          platform: IBKR, asset_class: fixed_income, isin: 'LU0290358497', ter: 0.10 }
+        IBGS:         { target: 10, ticker: 'IBGS',          platform: Saxo, asset_class: fixed_income, isin: 'IE00B14X4Q57', ter: 0.20 }
+        EGLN:         { target: 7,  ticker: 'EGLN',          platform: IBKR, asset_class: alternatives, isin: 'IE00B579F325', ter: 0.12 }
+        Crypto:       { target: 3,  ticker: 'BTC1+ETHWEUR+2SCS', platform: IBKR, asset_class: alternatives, ter: 0.00 }
 
     asset_classes:
         equity:       { target: 75, label: Equity,       band_low: 70,  band_high: 80 }
@@ -125,3 +125,51 @@ mido:
         crypto:
             target: 0.03
             bandwidth: 0.02
+
+    # Static look-through data for funds not available via Yahoo Finance
+    holdings:
+        NTWC:
+            top_holdings:
+                - { symbol: AAPL, name: Apple, pct: 4.8 }
+                - { symbol: MSFT, name: Microsoft, pct: 4.2 }
+                - { symbol: NVDA, name: NVIDIA, pct: 3.8 }
+                - { symbol: AMZN, name: Amazon, pct: 2.5 }
+                - { symbol: GOOGL, name: Alphabet, pct: 2.1 }
+            geography:
+                US: 65
+                Europe: 15
+                Japan: 7
+                UK: 4
+                Other: 9
+            sector_weightings:
+                - { sector: Technology, pct: 24.0 }
+                - { sector: Financial Services, pct: 15.0 }
+                - { sector: Healthcare, pct: 12.0 }
+                - { sector: Consumer Cyclical, pct: 11.0 }
+                - { sector: Industrials, pct: 10.0 }
+                - { sector: Communication Services, pct: 8.0 }
+                - { sector: Consumer Defensive, pct: 7.0 }
+                - { sector: Energy, pct: 5.0 }
+                - { sector: Other, pct: 8.0 }
+        NTEM:
+            top_holdings:
+                - { symbol: TSM, name: Taiwan Semiconductor, pct: 8.5 }
+                - { symbol: '005930.KS', name: Samsung Electronics, pct: 4.0 }
+                - { symbol: '2330.TW', name: TSMC, pct: 3.5 }
+                - { symbol: BABA, name: Alibaba, pct: 2.8 }
+                - { symbol: TCEHY, name: Tencent, pct: 2.5 }
+            geography:
+                China: 28
+                Taiwan: 18
+                India: 16
+                South Korea: 12
+                Brazil: 5
+                Other: 21
+            sector_weightings:
+                - { sector: Technology, pct: 22.0 }
+                - { sector: Financial Services, pct: 22.0 }
+                - { sector: Consumer Cyclical, pct: 13.0 }
+                - { sector: Communication Services, pct: 10.0 }
+                - { sector: Basic Materials, pct: 8.0 }
+                - { sector: Energy, pct: 6.0 }
+                - { sector: Other, pct: 19.0 }

@@ -1,5 +1,40 @@
 # Changelog — MidoDash
 
+## 2026-02-27 — Saxo Token Fix
+
+### Fixed
+- **Saxo token refresh fundamenteel herschreven** — tokens verliepen steeds waardoor "Saxo inloggen" bleef verschijnen:
+  - `refreshToken()` merged nu oude token-velden met nieuwe response — `refresh_token` en `refresh_token_expires_in` gaan niet meer verloren bij refresh
+  - Proactieve token refresh bij 50% lifetime (was: pas < 2 min voor expiry) — voorkomt race conditions
+  - Als proactieve refresh faalt, wordt bestaande geldige access token gewoon gebruikt
+  - Retry (2x) bij server errors (5xx) in token refresh
+  - HTTP 4xx errors correct afgehandeld (was: alleen >= 500)
+  - Dashboard zet `saxoAuthenticated` niet meer op `false` als `getPositions()` null retourneert (API down ≠ niet ingelogd)
+
+---
+
+## 2026-02-27 — MCP v2.0
+
+### Added
+- **12 nieuwe MCP tools** (totaal nu 18):
+  - `mido_portfolio_snapshot` — Live posities met gewichten, P/L, drift vs target
+  - `mido_cash_overview` — Cash per platform, open orders, dry powder breakdown
+  - `mido_currency_exposure` — FX-exposure, EUR vs non-EUR split
+  - `mido_performance_history` — Portfolio waarde over tijd, TWR berekening
+  - `mido_attribution` — Return attributie per positie/asset class/platform/geografie
+  - `mido_risk_metrics` — Volatiliteit, Sharpe, Sortino, VaR/CVaR, max drawdown
+  - `mido_stress_test` — 5 preset scenario's (crash, rate hike, stagflatie) + custom
+  - `mido_cost_analysis` — Transactiekosten + TER per positie, total cost ratio
+  - `mido_fundamentals` — P/E, dividend yield, AUM via Yahoo Finance
+  - `mido_fund_lookthrough` — Top holdings, sector/geografie breakdown per ETF
+  - `mido_rebalance_advisor` — Concrete koop/verkoop orders met FBI-waarschuwingen
+  - `mido_scenario_planner` — Monte Carlo simulatie (1000 runs) + milestones
+- 4 nieuwe service classes: McpPortfolioService, McpPerformanceService, McpRiskService, McpPlanningService
+- TER per target positie in mido_v65.yaml
+- Static look-through data voor NT World en NT EM funds in mido_v65.yaml
+
+---
+
 ## 2026-02-27
 
 ### Fixed

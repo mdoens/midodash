@@ -9,7 +9,11 @@ use App\Service\MarketDataService;
 use App\Service\Mcp\McpDashboardService;
 use App\Service\Mcp\McpIndicatorService;
 use App\Service\Mcp\McpMomentumService;
+use App\Service\Mcp\McpPerformanceService;
+use App\Service\Mcp\McpPlanningService;
+use App\Service\Mcp\McpPortfolioService;
 use App\Service\Mcp\McpProtocolService;
+use App\Service\Mcp\McpRiskService;
 use App\Service\TriggerService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -47,6 +51,10 @@ class McpController extends AbstractController
         private readonly McpDashboardService $dashboard,
         private readonly McpIndicatorService $indicators,
         private readonly McpMomentumService $momentum,
+        private readonly McpPortfolioService $portfolio,
+        private readonly McpPerformanceService $performance,
+        private readonly McpRiskService $risk,
+        private readonly McpPlanningService $planning,
         private readonly TriggerService $triggers,
         private readonly CrisisService $crisis,
         private readonly MarketDataService $marketData,
@@ -84,6 +92,18 @@ class McpController extends AbstractController
                 'mido_crisis_dashboard',
                 'mido_drawdown_calculator',
                 'mido_momentum_rebalancing',
+                'mido_portfolio_snapshot',
+                'mido_cash_overview',
+                'mido_currency_exposure',
+                'mido_performance_history',
+                'mido_attribution',
+                'mido_risk_metrics',
+                'mido_stress_test',
+                'mido_cost_analysis',
+                'mido_fundamentals',
+                'mido_fund_lookthrough',
+                'mido_rebalance_advisor',
+                'mido_scenario_planner',
             ],
         ]));
     }
@@ -488,6 +508,57 @@ class McpController extends AbstractController
             'mido_momentum_rebalancing' => $this->momentum->generateReport(
                 $arguments['format'] ?? 'markdown',
                 isset($arguments['portfolio_value']) ? (float) $arguments['portfolio_value'] : null,
+            ),
+            'mido_portfolio_snapshot' => $this->portfolio->getPortfolioSnapshot(
+                $arguments['format'] ?? 'markdown',
+            ),
+            'mido_cash_overview' => $this->portfolio->getCashOverview(
+                $arguments['format'] ?? 'markdown',
+            ),
+            'mido_currency_exposure' => $this->risk->getCurrencyExposure(
+                $arguments['format'] ?? 'markdown',
+            ),
+            'mido_performance_history' => $this->performance->getPerformanceHistory(
+                $arguments['format'] ?? 'markdown',
+                $arguments['period'] ?? '1y',
+                (bool) ($arguments['include_benchmark'] ?? false),
+            ),
+            'mido_attribution' => $this->performance->getAttribution(
+                $arguments['format'] ?? 'markdown',
+                $arguments['period'] ?? '3m',
+                $arguments['group_by'] ?? 'position',
+            ),
+            'mido_risk_metrics' => $this->risk->getRiskMetrics(
+                $arguments['format'] ?? 'markdown',
+                $arguments['period'] ?? '1y',
+            ),
+            'mido_stress_test' => $this->risk->getStressTest(
+                $arguments['format'] ?? 'markdown',
+                $arguments['scenario'] ?? 'crash_20',
+                $arguments['custom_shocks'] ?? null,
+            ),
+            'mido_cost_analysis' => $this->planning->getCostAnalysis(
+                $arguments['format'] ?? 'markdown',
+                $arguments['period'] ?? '1y',
+            ),
+            'mido_fundamentals' => $this->planning->getFundamentals(
+                $arguments['format'] ?? 'markdown',
+                $arguments['ticker'] ?? '',
+            ),
+            'mido_fund_lookthrough' => $this->planning->getFundLookthrough(
+                $arguments['format'] ?? 'markdown',
+                $arguments['position'] ?? null,
+            ),
+            'mido_rebalance_advisor' => $this->planning->getRebalanceAdvice(
+                $arguments['format'] ?? 'markdown',
+                isset($arguments['cash_to_deploy']) ? (float) $arguments['cash_to_deploy'] : null,
+            ),
+            'mido_scenario_planner' => $this->planning->getScenarioPlanner(
+                $arguments['format'] ?? 'markdown',
+                (int) ($arguments['years'] ?? 10),
+                (float) ($arguments['expected_return_pct'] ?? 7.0),
+                (float) ($arguments['monthly_contribution'] ?? 0),
+                (float) ($arguments['inflation_pct'] ?? 2.0),
             ),
             default => throw new \InvalidArgumentException("Unknown tool: {$toolName}"),
         };
