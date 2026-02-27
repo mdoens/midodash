@@ -47,14 +47,14 @@
 {% if saxo_from_buffer|default(false) %}
 <div class="alert alert--buffered">
     <span class="dot dot--yellow"></span>
-    Saxo data van {{ saxo_buffered_at|date("d M Y H:i") }} (gebufferd)
+    Saxo data van {{ saxo_buffered_at }} (gebufferd)
     {% if not saxo_authenticated %} — <a href="{{ path('saxo_login') }}">Token vernieuwen</a>{% endif %}
 </div>
 {% endif %}
 {% if ib_from_buffer|default(false) %}
 <div class="alert alert--buffered">
     <span class="dot dot--yellow"></span>
-    IB data van {{ ib_buffered_at|date("d M Y H:i") }} (gebufferd)
+    IB data van {{ ib_buffered_at }} (gebufferd)
 </div>
 {% endif %}
 

@@ -46,6 +46,7 @@ class DashboardController extends AbstractController
             $checks['returns_service'] = 'ERROR: ' . $e->getMessage();
         }
 
+        $cached = null;
         try {
             $cached = $dashboardCache->load();
             $checks['cache'] = $cached !== null ? 'OK: cached' : 'OK: no cache';
@@ -82,7 +83,7 @@ class DashboardController extends AbstractController
         }
 
         // Try full template render
-        if (isset($cached) && $cached !== null) {
+        if ($cached !== null) {
             try {
                 $cached['radar_chart'] = $this->buildFactorRadarChart($chartBuilder, $cached['factors'] ?? []);
                 $checks['radar_chart'] = 'OK';
@@ -410,9 +411,9 @@ class DashboardController extends AbstractController
             'momentum_error' => $momentumError,
             'macro_error' => $macroError,
             'saxo_from_buffer' => $saxoFromBuffer,
-            'saxo_buffered_at' => $saxoBufferedAt,
+            'saxo_buffered_at' => $saxoBufferedAt?->format('d M Y H:i'),
             'ib_from_buffer' => $ibFromBuffer,
-            'ib_buffered_at' => $ibBufferedAt,
+            'ib_buffered_at' => $ibBufferedAt?->format('d M Y H:i'),
         ];
     }
 
