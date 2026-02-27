@@ -146,20 +146,6 @@ class DashboardController extends AbstractController
         $tokenFile = $this->getParameter('kernel.project_dir') . '/var/saxo_tokens.json';
         $balance = $dataBuffer->retrieve('saxo', 'balance');
 
-        // Fetch raw cash transaction types for debugging
-        $cashTxTypes = [];
-        $cashTxSample = [];
-        if ($saxoClient->isAuthenticated()) {
-            $cashTxs = $saxoClient->getCashTransactions() ?? [];
-            foreach ($cashTxs as $tx) {
-                $type = (string) ($tx['TransactionType'] ?? 'MISSING');
-                $cashTxTypes[$type] = ($cashTxTypes[$type] ?? 0) + 1;
-                if (!isset($cashTxSample[$type])) {
-                    $cashTxSample[$type] = $tx;
-                }
-            }
-        }
-
         return new JsonResponse([
             'token_file_exists' => file_exists($tokenFile),
             'token_file_size' => file_exists($tokenFile) ? filesize($tokenFile) : 0,
@@ -169,8 +155,6 @@ class DashboardController extends AbstractController
             'token_expiry_human' => $saxoClient->getTokenExpiry() !== null ? date('Y-m-d H:i:s', $saxoClient->getTokenExpiry()) : null,
             'refresh_ttl_seconds' => $saxoClient->getRefreshTokenTtl(),
             'balance' => $balance !== null ? $balance['data'] : null,
-            'cash_tx_types' => $cashTxTypes,
-            'cash_tx_samples' => $cashTxSample,
         ]);
     }
 
@@ -224,10 +208,8 @@ class DashboardController extends AbstractController
                 } elseif ($cashTxs === []) {
                     $result['saxo_cash'] = 'No cash transactions found';
                 } else {
-                    // Delete existing Saxo cash transactions for re-import (fixes wrong field mapping)
-                    $deleted = $importService->deleteSaxoCashTransactions();
                     $r = $importService->importFromSaxoCashTransactions($cashTxs);
-                    $result['saxo_cash'] = sprintf('%d imported, %d deleted+reimported', $r['imported'], $deleted);
+                    $result['saxo_cash'] = sprintf('%d imported, %d skipped', $r['imported'], $r['skipped']);
                 }
             }
         } catch (\Throwable $e) {

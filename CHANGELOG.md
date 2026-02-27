@@ -1,10 +1,11 @@
 # Changelog — MidoDash
 
-## 2025-02-27
+## 2026-02-27
 
 ### Fixed
 - Saxo auth: access token werd onterecht als ongeldig gezien wanneer refresh token verlopen was, terwijl access token nog uren geldig was (`getValidToken()` logica)
 - Dashboard sessie: cookie lifetime van 0 (browser session) naar 7 dagen — voorkomt opnieuw inloggen na deploy
+- Saxo cash transacties (dividenden, stortingen, fees) werden met verkeerde velden geïmporteerd — `BookedAmount` i.p.v. `Amount`, `Instrument.Symbol` i.p.v. `InstrumentSymbol`, type-mapping via `Event` veld
 
 ### Added
 - Open orders tonen nu waarde (CashAmount voor mutual fund orders) in plaats van lege kolom
@@ -13,6 +14,8 @@
 
 ### Changed
 - Orders tabel: "Aantal" kolom vervangen door "Waarde" kolom
+- IB/Saxo data timestamps in dashboard header (IB: datum/tijd, Saxo: live status)
+- `/health/ib` endpoint voor IB data diagnostiek
 - CLAUDE.md: changelog bijhouden is nu verplicht bij elke deploy
 
 ---
