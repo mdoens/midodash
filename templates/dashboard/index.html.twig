@@ -299,6 +299,51 @@
                 {% endfor %}
             </div>
         </div>
+
+        {# ── Saxo Open Orders ── #}
+        {% if saxo_open_orders is defined and saxo_open_orders|length > 0 %}
+        <div class="glass glass--yellow mt-16">
+            <div class="section-label"><span class="section-label__text">Open Orders (Saxo)</span></div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">
+                {{ saxo_open_orders|length }} openstaande order(s) — waarde nog niet in posities opgenomen
+            </div>
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Instrument</th>
+                            <th>Richting</th>
+                            <th style="text-align:right;">Aantal</th>
+                            <th>Type</th>
+                            <th style="text-align:right;">Prijs</th>
+                            <th>Duur</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in saxo_open_orders %}
+                        <tr>
+                            <td>
+                                <span class="fw-600">{{ order.symbol }}</span>
+                                {% if order.description %}<span class="text-muted" style="font-size:11px;"> — {{ order.description }}</span>{% endif %}
+                            </td>
+                            <td>
+                                <span class="badge badge--{{ order.buy_sell == 'Buy' ? 'green' : 'red' }}" style="font-size:10px;">
+                                    {{ order.buy_sell }}
+                                </span>
+                            </td>
+                            <td style="text-align:right;" class="mono">{{ order.amount|number_format(0, ',', '.') }}</td>
+                            <td class="text-muted">{{ order.order_type }}</td>
+                            <td style="text-align:right;" class="mono">{{ order.price > 0 ? order.price|number_format(2, ',', '.') : 'Market' }}</td>
+                            <td class="text-muted">{{ order.duration }}</td>
+                            <td><span class="badge badge--yellow" style="font-size:10px;">{{ order.status }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     {# ════════════════════════════════════════════════════════════════

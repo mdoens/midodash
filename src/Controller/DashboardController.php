@@ -110,9 +110,10 @@ class DashboardController extends AbstractController
     }
 
     #[Route('/health/saxo', name: 'health_saxo')]
-    public function debugSaxo(SaxoClient $saxoClient): JsonResponse
+    public function debugSaxo(SaxoClient $saxoClient, DataBufferService $dataBuffer): JsonResponse
     {
         $tokenFile = $this->getParameter('kernel.project_dir') . '/var/saxo_tokens.json';
+        $balance = $dataBuffer->retrieve('saxo', 'balance');
 
         return new JsonResponse([
             'token_file_exists' => file_exists($tokenFile),
@@ -122,6 +123,7 @@ class DashboardController extends AbstractController
             'token_expiry' => $saxoClient->getTokenExpiry(),
             'token_expiry_human' => $saxoClient->getTokenExpiry() !== null ? date('Y-m-d H:i:s', $saxoClient->getTokenExpiry()) : null,
             'refresh_ttl_seconds' => $saxoClient->getRefreshTokenTtl(),
+            'balance' => $balance !== null ? $balance['data'] : null,
         ]);
     }
 
@@ -157,9 +159,6 @@ class DashboardController extends AbstractController
             if (!$saxoClient->isAuthenticated()) {
                 $result['saxo'] = 'Not authenticated';
             } else {
-                // Delete existing Saxo transactions for clean re-import with corrected field mapping
-                $result['saxo_deleted'] = $importService->deletePlatformTransactions('saxo');
-
                 $trades = $saxoClient->getHistoricalTrades();
                 if ($trades === null) {
                     $result['saxo'] = 'Could not fetch trades (null)';
@@ -167,17 +166,6 @@ class DashboardController extends AbstractController
                     $result['saxo'] = 'Empty trade list — API returned 0 trades';
                 } else {
                     $result['saxo_count'] = count($trades);
-                    // Show key fields from each trade for debugging
-                    $result['saxo_trades'] = array_map(fn(array $t): array => [
-                        'InstrumentSymbol' => $t['InstrumentSymbol'] ?? '?',
-                        'InstrumentDescription' => $t['InstrumentDescription'] ?? '?',
-                        'Direction' => $t['Direction'] ?? '?',
-                        'Amount' => $t['Amount'] ?? '?',
-                        'Price' => $t['Price'] ?? '?',
-                        'TradedValue' => $t['TradedValue'] ?? '?',
-                        'BookedAmountClientCurrency' => $t['BookedAmountClientCurrency'] ?? '?',
-                        'TradeDate' => $t['TradeDate'] ?? '?',
-                    ], $trades);
                     $r = $importService->importFromSaxoOrders($trades);
                     $result['saxo'] = sprintf('%d imported, %d skipped', $r['imported'], $r['skipped']);
                 }
@@ -229,8 +217,9 @@ class DashboardController extends AbstractController
             $cached['radar_chart'] = $this->buildFactorRadarChart($chartBuilder, $portfolioService->getFactorData());
             $cached['performance_chart'] = $this->buildPerformanceChart($chartBuilder, $cached['allocation']['positions']);
 
-            // Always check live Saxo auth status
+            // Always check live Saxo auth status + open orders
             $cached['saxo_authenticated'] = $saxoClient->isAuthenticated();
+            $cached['saxo_open_orders'] = $cached['saxo_authenticated'] ? ($saxoClient->getOpenOrders() ?? []) : [];
 
             // Portfolio history for Historie tab
             $history = $snapshotService->getHistory(365);
@@ -368,12 +357,16 @@ class DashboardController extends AbstractController
         $saxoPositions = null;
         $saxoCashBalance = 0.0;
         $saxoAuthenticated = false;
+        $saxoOpenOrders = [];
         try {
             $saxoAuthenticated = $saxoClient->isAuthenticated();
             if ($saxoAuthenticated) {
                 $saxoPositions = $saxoClient->getPositions();
                 $saxoBalance = $saxoClient->getAccountBalance();
                 $saxoCashBalance = (float) ($saxoBalance['CashBalance'] ?? 0);
+
+                // Fetch open orders
+                $saxoOpenOrders = $saxoClient->getOpenOrders() ?? [];
 
                 // Log Saxo symbols for debugging mapping (stderr for Coolify visibility)
                 if ($saxoPositions !== null) {
@@ -506,6 +499,7 @@ class DashboardController extends AbstractController
             'saxo_buffered_at' => $saxoBufferedAt?->format('d M Y H:i'),
             'ib_from_buffer' => $ibFromBuffer,
             'ib_buffered_at' => $ibBufferedAt?->format('d M Y H:i'),
+            'saxo_open_orders' => $saxoOpenOrders,
         ];
     }
 

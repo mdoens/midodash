@@ -20,8 +20,25 @@ class ReturnsService
      */
     public function getPortfolioReturns(array $allocation): array
     {
-        $totalDeposits = $this->transactionRepository->sumByType('deposit');
-        $totalWithdrawals = abs($this->transactionRepository->sumByType('withdrawal'));
+        // IB deposits/withdrawals from transaction records (platform-filtered to avoid double-counting)
+        $ibDeposits = $this->transactionRepository->sumByType('deposit', 'ib');
+        $totalWithdrawals = abs($this->transactionRepository->sumByType('withdrawal', 'ib'));
+
+        // Saxo: derive net deposits from allocation (cost basis = value - P/L)
+        // Saxo API doesn't provide cash transaction history, so we approximate:
+        // - Position cost basis = current value minus unrealized P/L
+        // - Cash is included because uninvested cash came from deposits
+        // Note: if positions were sold at profit, cash includes that profit,
+        // slightly overstating deposits. Acceptable for buy-and-hold portfolio.
+        $saxoDeposits = 0.0;
+        foreach ($allocation['positions'] ?? [] as $pos) {
+            if (($pos['platform'] ?? '') === 'Saxo' && ($pos['value'] ?? 0) > 0) {
+                $saxoDeposits += (float) ($pos['value'] ?? 0) - (float) ($pos['pl'] ?? 0);
+            }
+        }
+        $saxoDeposits += (float) ($allocation['saxo_cash'] ?? 0);
+
+        $totalDeposits = $ibDeposits + $saxoDeposits;
         $netDeposits = $totalDeposits - $totalWithdrawals;
         $currentValue = (float) ($allocation['total_portfolio'] ?? 0);
         $totalReturn = $currentValue - $netDeposits;

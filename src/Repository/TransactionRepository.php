@@ -53,15 +53,19 @@ class TransactionRepository extends ServiceEntityRepository
             ->getResult();
     }
 
-    public function sumByType(string $type): float
+    public function sumByType(string $type, ?string $platform = null): float
     {
-        /** @var string|null $sum */
-        $sum = $this->createQueryBuilder('t')
+        $qb = $this->createQueryBuilder('t')
             ->select('SUM(COALESCE(t.amountEur, t.amount))')
             ->where('t.type = :type')
-            ->setParameter('type', $type)
-            ->getQuery()
-            ->getSingleScalarResult();
+            ->setParameter('type', $type);
+
+        if ($platform !== null) {
+            $qb->andWhere('t.platform = :platform')->setParameter('platform', $platform);
+        }
+
+        /** @var string|null $sum */
+        $sum = $qb->getQuery()->getSingleScalarResult();
 
         return (float) ($sum ?? 0);
     }

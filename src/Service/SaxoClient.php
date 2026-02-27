@@ -286,6 +286,89 @@ class SaxoClient
         }
     }
 
+    /**
+     * Fetch open/working orders from Saxo.
+     *
+     * @return list<array{order_id: string, symbol: string, description: string, buy_sell: string, amount: float, order_type: string, price: float, duration: string, status: string}>|null
+     */
+    public function getOpenOrders(): ?array
+    {
+        $cached = $this->loadCache();
+        if ($cached !== null && isset($cached['open_orders'])) {
+            return $cached['open_orders'];
+        }
+
+        $token = $this->getValidToken();
+        if ($token === null) {
+            return null;
+        }
+
+        try {
+            $response = $this->httpClient->request('GET', $this->saxoApiBase . '/port/v1/orders/me', [
+                'headers' => ['Authorization' => 'Bearer ' . $token],
+                'query' => ['FieldGroups' => 'DisplayAndFormat'],
+            ]);
+
+            if ($response->getStatusCode() === 401) {
+                $refreshed = $this->refreshToken();
+                if ($refreshed === null) {
+                    $this->logger->warning('Saxo open orders: auth failed after refresh');
+
+                    return null;
+                }
+
+                $response = $this->httpClient->request('GET', $this->saxoApiBase . '/port/v1/orders/me', [
+                    'headers' => ['Authorization' => 'Bearer ' . $refreshed['access_token']],
+                    'query' => ['FieldGroups' => 'DisplayAndFormat'],
+                ]);
+
+                if ($response->getStatusCode() === 401) {
+                    $this->logger->error('Saxo open orders: still 401 after token refresh');
+
+                    return null;
+                }
+            }
+
+            $data = $response->toArray(false);
+            $orders = [];
+
+            foreach ($data['Data'] ?? [] as $order) {
+                $display = $order['DisplayAndFormat'] ?? [];
+                $buySell = (string) ($order['BuySell'] ?? 'Unknown');
+                $status = (string) ($order['Status'] ?? 'Unknown');
+
+                // Only include working/pending orders
+                if (!in_array($status, ['Working', 'NotTriggered', 'Placed'], true)) {
+                    continue;
+                }
+
+                $duration = $order['Duration'] ?? [];
+                $durationStr = is_array($duration) ? ($duration['DurationType'] ?? 'Unknown') : (string) $duration;
+
+                $orders[] = [
+                    'order_id' => (string) ($order['OrderId'] ?? ''),
+                    'symbol' => (string) ($display['Symbol'] ?? ($order['Uic'] ?? '?')),
+                    'description' => (string) ($display['Description'] ?? ''),
+                    'buy_sell' => $buySell,
+                    'amount' => (float) ($order['Amount'] ?? 0),
+                    'order_type' => (string) ($order['OrderType'] ?? 'Unknown'),
+                    'price' => (float) ($order['Price'] ?? 0),
+                    'duration' => $durationStr,
+                    'status' => $status,
+                ];
+            }
+
+            $this->updateCache('open_orders', $orders);
+            $this->logger->info('Saxo open orders fetched', ['count' => count($orders)]);
+
+            return $orders;
+        } catch (\Throwable $e) {
+            $this->logger->error('Saxo open orders fetch failed', ['error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
     public function isAuthenticated(): bool
     {
         $cached = $this->loadCache();
