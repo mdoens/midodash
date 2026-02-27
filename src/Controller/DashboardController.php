@@ -146,6 +146,23 @@ class DashboardController extends AbstractController
         $tokenFile = $this->getParameter('kernel.project_dir') . '/var/saxo_tokens.json';
         $balance = $dataBuffer->retrieve('saxo', 'balance');
 
+        // Fetch raw cash transaction types for debugging
+        $cashTxTypes = [];
+        $cashTxSample = [];
+        if ($saxoClient->isAuthenticated()) {
+            $cashTxs = $saxoClient->getCashTransactions() ?? [];
+            foreach ($cashTxs as $tx) {
+                $type = (string) ($tx['TransactionType'] ?? 'MISSING');
+                $cashTxTypes[$type] = ($cashTxTypes[$type] ?? 0) + 1;
+                if (!isset($cashTxSample[$type])) {
+                    $cashTxSample[$type] = array_intersect_key($tx, array_flip([
+                        'TransactionType', 'TransactionSubType', 'Amount', 'Currency',
+                        'InstrumentDescription', 'Symbol', 'AccountValueDate',
+                    ]));
+                }
+            }
+        }
+
         return new JsonResponse([
             'token_file_exists' => file_exists($tokenFile),
             'token_file_size' => file_exists($tokenFile) ? filesize($tokenFile) : 0,
@@ -155,6 +172,8 @@ class DashboardController extends AbstractController
             'token_expiry_human' => $saxoClient->getTokenExpiry() !== null ? date('Y-m-d H:i:s', $saxoClient->getTokenExpiry()) : null,
             'refresh_ttl_seconds' => $saxoClient->getRefreshTokenTtl(),
             'balance' => $balance !== null ? $balance['data'] : null,
+            'cash_tx_types' => $cashTxTypes,
+            'cash_tx_samples' => $cashTxSample,
         ]);
     }
 
