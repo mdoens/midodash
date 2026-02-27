@@ -420,7 +420,7 @@ class DashboardController extends AbstractController
 
         $chart->setOptions([
             'responsive' => true,
-            'maintainAspectRatio' => true,
+            'maintainAspectRatio' => false,
             'scales' => [
                 'r' => [
                     'beginAtZero' => true,
