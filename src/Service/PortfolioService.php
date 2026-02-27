@@ -20,7 +20,7 @@ class PortfolioService
     }
 
     /**
-     * @return array<string, array{target: int, ticker: string, platform: string, asset_class: string}>
+     * @return array<string, array{target: int, ticker: string, platform: string, asset_class: string, isin?: string}>
      */
     public function getTargets(): array
     {
@@ -165,21 +165,33 @@ class PortfolioService
             }
         }
 
-        // Match Saxo positions (by symbol_map, then by ISIN, then by description)
+        // Match Saxo positions (by symbol_map, then stripped symbol, then ISIN, then description)
         if ($saxoPositions !== null) {
             foreach ($saxoPositions as $pos) {
                 $symbol = $pos['symbol'] ?? '';
                 $description = $pos['description'] ?? '';
                 $targetName = $symbolMap[$symbol] ?? null;
 
-                // Fallback: match by description containing target name
+                // Fallback: strip exchange suffix (e.g. "IBGS:xams" → "IBGS")
+                if ($targetName === null && str_contains($symbol, ':')) {
+                    $baseSymbol = explode(':', $symbol)[0];
+                    $targetName = $symbolMap[$baseSymbol] ?? null;
+                }
+
+                // Fallback: match by ISIN (if Saxo returns it)
+                if ($targetName === null && isset($pos['isin']) && isset($isinMap[(string) $pos['isin']])) {
+                    $targetName = $isinMap[(string) $pos['isin']];
+                }
+
+                // Fallback: match by description containing target name (all platforms)
                 if ($targetName === null) {
                     foreach ($targets as $name => $config) {
-                        if ($config['platform'] !== 'Saxo') {
-                            continue;
-                        }
-                        // Match on partial name (e.g. "NT World Custom" matches "NT World")
                         if (stripos($description, $name) !== false) {
+                            $targetName = $name;
+                            break;
+                        }
+                        // Also match on ticker (e.g. description contains "IBGS")
+                        if (stripos($description, (string) $config['ticker']) !== false) {
                             $targetName = $name;
                             break;
                         }

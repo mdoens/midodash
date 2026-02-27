@@ -10,7 +10,7 @@ mido:
         AVWC:         { target: 15, ticker: 'AVWC',          platform: IBKR, asset_class: equity, isin: 'IE00BL0L0H68' }
         AVWS:         { target: 10, ticker: 'AVWS',          platform: IBKR, asset_class: equity, isin: 'IE000JS6TQ89' }
         XEON:         { target: 5,  ticker: 'XEON',          platform: IBKR, asset_class: fixed_income, isin: 'LU0290358497' }
-        IBGS:         { target: 10, ticker: 'IBGS',          platform: IBKR, asset_class: fixed_income, isin: 'IE00B14X4Q57' }
+        IBGS:         { target: 10, ticker: 'IBGS',          platform: Saxo, asset_class: fixed_income, isin: 'IE00B14X4Q57' }
         EGLN:         { target: 7,  ticker: 'EGLN',          platform: IBKR, asset_class: alternatives, isin: 'IE00B579F325' }
         Crypto:       { target: 3,  ticker: 'BTC1+ETHWEUR+2SCS', platform: IBKR, asset_class: alternatives }
 
