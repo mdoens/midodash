@@ -154,20 +154,22 @@ php bin/console cache:clear
 - `mido_momentum_rebalancing` — ETF momentum rebalancing report
 
 ### Claude Desktop Configuration
-Claude Desktop gebruikt `mcp-remote` als stdio proxy voor remote HTTP servers:
+Claude Desktop gebruikt `mcp-remote` als stdio proxy voor remote HTTP servers.
+Installeer eerst: `npm install -g mcp-remote`
+
+Config in `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```json
 {
   "mido": {
-    "command": "npx",
+    "command": "/opt/homebrew/bin/mcp-remote",
     "args": [
-      "-y", "mcp-remote",
       "https://mido.barcelona2.doens.nl/mcp",
       "--header", "Authorization: Bearer <MCP_TOKEN>"
     ]
   }
 }
 ```
-Config bestand: `~/Library/Application Support/Claude/claude_desktop_config.json`
+Let op: gebruik het volledige pad naar `mcp-remote`, niet `npx` — dat is te traag en geeft timeouts in Claude Desktop.
 
 ### Claude Code Configuration
 ```bash
