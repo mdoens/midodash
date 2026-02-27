@@ -463,12 +463,20 @@ class DashboardController extends AbstractController
         ), $ibPositions);
         $logger->info('IB positions loaded', ['count' => count($ibPositions), 'symbols' => $ibSymbols]);
 
+        // ── Calculate open order value (committed cash not yet in positions) ──
+        $openOrdersValue = 0.0;
+        foreach ($saxoOpenOrders as $order) {
+            $openOrdersValue += $order['order_value'];
+        }
+
         // ── Portfolio allocation (v8.0) ──
+        // Add open order value to Saxo cash — Saxo deducts from CashBalance when order is placed,
+        // but the position doesn't exist yet, so this money would otherwise be missing from the total.
         $allocation = $portfolioService->calculateAllocations(
             $ibPositions,
             $saxoPositions,
             $ibCashBalance,
-            $saxoCashBalance,
+            $saxoCashBalance + $openOrdersValue,
         );
 
         // Log matched positions

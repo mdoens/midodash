@@ -380,7 +380,7 @@ class SaxoClient
     /**
      * Fetch open/working orders from Saxo.
      *
-     * @return list<array{order_id: string, symbol: string, description: string, buy_sell: string, amount: float, order_type: string, price: float, duration: string, status: string}>|null
+     * @return list<array{order_id: string, symbol: string, description: string, buy_sell: string, amount: float, cash_amount: float, order_type: string, price: float, order_value: float, duration: string, status: string}>|null
      */
     public function getOpenOrders(): ?array
     {
