@@ -91,7 +91,13 @@ class ReturnsService
             // For positions without transaction data (e.g. Saxo), derive cost basis from live P/L
             $hasTransactions = $totalBought > 0 || $totalSold > 0;
 
-            if ($hasTransactions) {
+            if ($hasTransactions && $currentValue > 0 && $livePl !== 0.0) {
+                // Has both transactions and live broker P/L — prefer broker P/L for open positions
+                // because transaction history may be incomplete (e.g. cross-platform moves)
+                $unrealizedPl = $livePl;
+                $costBasis = $currentValue - $livePl;
+                $realizedPl = 0.0;
+            } elseif ($hasTransactions) {
                 $netInvested = $totalBought - $totalSold;
                 $unrealizedPl = $currentValue > 0 ? $currentValue - $netInvested : 0.0;
                 // Realized P/L only for fully closed positions (no current value left)

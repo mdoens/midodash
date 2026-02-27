@@ -207,16 +207,30 @@ class TransactionImportService
             $updated += $count;
         }
 
-        // Remap Saxo fund descriptions to short names (fixes old imports with full descriptions)
+        // Remap long descriptions and old names to short ticker codes
         $descriptionMap = [
-            '%NORTHERN TRUST WORLD%' => 'NT World',
-            '%NORTHERN TRUST%EMERGING%' => 'NT EM',
-            '%NORTHERN TRUST%EUROPE%' => 'NT Europe',
-            '%NT EMERGING%' => 'NT EM',
-            '%NT EUROPE%' => 'NT Europe',
+            // Saxo fund descriptions → ticker codes
+            '%NORTHERN TRUST WORLD%' => 'NTWC',
+            '%NORTHERN TRUST%EMERGING MARKET%' => 'NTEM',
+            '%NORTHERN TRUST%EUROPE%' => 'NTEU',
+            '%NT EMERGING%' => 'NTEM',
+            '%NT EUROPE%' => 'NTEU',
+            // Old position names → new ticker codes
+            'NT World' => 'NTWC',
+            'NT EM' => 'NTEM',
+            'NT Europe' => 'NTEU',
+            // IB/Saxo long descriptions → ticker codes
             '%Ultrashort Bond%' => 'XEON',
+            '%Overnight Rate%' => 'XEON',
             '%Euro Government Bond 1-3%' => 'IBGS',
             '%Physical Gold%' => 'EGLN',
+            '%AVANTIS%GLOBAL EQ%' => 'AVWC',
+            '%AVANTIS%SMALL%' => 'AVWS',
+            '%AVANTIS%EM%' => 'AVEM',
+            '%BITWISE%BITCOIN%' => 'Crypto',
+            '%WISDOMTREE%ETHEREUM%' => 'Crypto',
+            '%21SHARES%SOLANA%' => 'Crypto',
+            '%SPDR%EUROPE%VALUE%' => 'ZPRX',
         ];
 
         foreach ($descriptionMap as $pattern => $name) {

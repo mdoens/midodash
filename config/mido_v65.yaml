@@ -5,8 +5,8 @@ mido:
 
     # v8.0 target allocations — EUR 1.800.000 portfolio
     targets:
-        NT World:     { target: 40, ticker: 'NTWCEAE.MFU',  platform: Saxo, asset_class: equity, isin: 'NL0011225305' }
-        NT EM:        { target: 10, ticker: 'NTEMESA.MFU',   platform: Saxo, asset_class: equity, isin: 'NL0015417802' }
+        NTWC:         { target: 40, ticker: 'NTWCEAE.MFU',  platform: Saxo, asset_class: equity, isin: 'NL0011225305' }
+        NTEM:         { target: 10, ticker: 'NTEMESA.MFU',   platform: Saxo, asset_class: equity, isin: 'NL0015417802' }
         AVWC:         { target: 15, ticker: 'AVWC',          platform: IBKR, asset_class: equity, isin: 'IE00BL0L0H68' }
         AVWS:         { target: 10, ticker: 'AVWS',          platform: IBKR, asset_class: equity, isin: 'IE000JS6TQ89' }
         XEON:         { target: 5,  ticker: 'XEON',          platform: IBKR, asset_class: fixed_income, isin: 'LU0290358497' }
@@ -34,21 +34,23 @@ mido:
         XEON: XEON
         IBGS: IBGS
         EGLN: EGLN
+        PPFB: EGLN
         'BTC1': Crypto
         'ETHWEUR': Crypto
+        'WETH': Crypto
         '2SCS': Crypto
         # Saxo symbols
-        'NTWCEAE.MFU': 'NT World'
-        'NTEMESA.MFU': 'NT EM'
+        'NTWCEAE.MFU': NTWC
+        'NTEMESA.MFU': NTEM
         # Legacy positions still in portfolio (being sold)
         ZPRX: ZPRX
         AVEM: AVEM
         ERNX: ERNX
         IBGM: IBGM
-        'NTECENA.MFU': 'NT Europe'
+        'NTECENA.MFU': NTEU
         'ERNX:xetr': ERNX
-        'IWMO': 'IWMO'
-        'QCEU': 'QCEU'
+        'IWMO': IWMO
+        'QCEU': QCEU
 
     factors:
         - { factor: Beta,     score: 0.56 }
@@ -58,10 +60,10 @@ mido:
         - { factor: Quality,  score: 0.28 }
 
     factor_mapping:
-        - { position: 'NT World (40%)',  factors: [Beta],                     description: 'Marktgewogen kern, FGR-voordeel (FBI)' }
+        - { position: 'NTWC (40%)',      factors: [Beta],                     description: 'Marktgewogen kern, FGR-voordeel (FBI)' }
         - { position: 'AVWC (15%)',      factors: [Value, Quality, Momentum], description: 'Multi-factor met momentum' }
         - { position: 'AVWS (10%)',      factors: [Value, Size, Momentum],    description: 'Small cap value met profitability' }
-        - { position: 'NT EM (10%)',     factors: [Value, Quality],           description: 'EM kern, FGR-voordeel (FBI)' }
+        - { position: 'NTEM (10%)',      factors: [Value, Quality],           description: 'EM kern, FGR-voordeel (FBI)' }
 
     # v8.0 crisis thresholds (calibrated from v6.5)
     crisis:
@@ -105,13 +107,13 @@ mido:
     momentum:
         portfolio_value: 1800000
         positions:
-            IWDA.AS:  { name: 'NT World (proxy)',          target: 0.40, type: equity,       platform: Saxo, fbi: true,  proxy: 'IWDA.AS als proxy (zelfde index)', actual: 'Northern Trust World Custom ESG' }
-            AVWC.DE:  { name: 'Avantis Global Equity',     target: 0.15, type: equity,       platform: IBKR, fbi: false }
-            IEMA.AS:  { name: 'NT EM (proxy)',             target: 0.10, type: equity,       platform: Saxo, fbi: true,  proxy: 'IEMA.AS als proxy (zelfde index)', actual: 'Northern Trust EM Custom ESG' }
-            AVWS.DE:  { name: 'Avantis Global SCV',        target: 0.10, type: equity,       platform: IBKR, fbi: false }
-            IBGS.AS:  { name: 'iShares EUR Govt 1-3yr',    target: 0.10, type: fixed_income, platform: IBKR, fbi: false }
-            SGLD.L:   { name: 'Invesco Physical Gold',     target: 0.07, type: alternatief,  platform: IBKR, fbi: false }
-            XEON.DE:  { name: 'Xtrackers EUR Overnight',   target: 0.05, type: cash,         platform: IBKR, fbi: false }
+            IWDA.AS:  { name: 'NTWC (proxy)',               target: 0.40, type: equity,       platform: Saxo, fbi: true,  proxy: 'IWDA.AS als proxy (zelfde index)', actual: 'Northern Trust World Custom ESG' }
+            AVWC.DE:  { name: 'AVWC',                      target: 0.15, type: equity,       platform: IBKR, fbi: false }
+            IEMA.AS:  { name: 'NTEM (proxy)',               target: 0.10, type: equity,       platform: Saxo, fbi: true,  proxy: 'IEMA.AS als proxy (zelfde index)', actual: 'Northern Trust EM Custom ESG' }
+            AVWS.DE:  { name: 'AVWS',                      target: 0.10, type: equity,       platform: IBKR, fbi: false }
+            IBGS.AS:  { name: 'IBGS',                      target: 0.10, type: fixed_income, platform: IBKR, fbi: false }
+            SGLD.L:   { name: 'EGLN',                      target: 0.07, type: alternatief,  platform: IBKR, fbi: false }
+            XEON.DE:  { name: 'XEON',                      target: 0.05, type: cash,         platform: IBKR, fbi: false }
         bandwidths:
             normaal: 0.03
             verruimd: 0.05
