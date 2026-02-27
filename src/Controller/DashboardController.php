@@ -109,6 +109,22 @@ class DashboardController extends AbstractController
         return $this->json($checks);
     }
 
+    #[Route('/health/saxo', name: 'health_saxo')]
+    public function debugSaxo(SaxoClient $saxoClient): JsonResponse
+    {
+        $tokenFile = $this->getParameter('kernel.project_dir') . '/var/saxo_tokens.json';
+
+        return new JsonResponse([
+            'token_file_exists' => file_exists($tokenFile),
+            'token_file_size' => file_exists($tokenFile) ? filesize($tokenFile) : 0,
+            'token_file_age_seconds' => file_exists($tokenFile) ? time() - (int) filemtime($tokenFile) : null,
+            'is_authenticated' => $saxoClient->isAuthenticated(),
+            'token_expiry' => $saxoClient->getTokenExpiry(),
+            'token_expiry_human' => $saxoClient->getTokenExpiry() !== null ? date('Y-m-d H:i:s', $saxoClient->getTokenExpiry()) : null,
+            'refresh_ttl_seconds' => $saxoClient->getRefreshTokenTtl(),
+        ]);
+    }
+
     #[Route('/health/import', name: 'health_import')]
     public function triggerImport(
         IbClient $ibClient,
