@@ -197,7 +197,33 @@ class SaxoClient
     }
 
     /**
+     * Get the ClientKey for the authenticated user.
+     */
+    public function getClientKey(): ?string
+    {
+        $token = $this->getValidToken();
+        if ($token === null) {
+            return null;
+        }
+
+        try {
+            $response = $this->httpClient->request('GET', $this->saxoApiBase . '/port/v1/clients/me', [
+                'headers' => ['Authorization' => 'Bearer ' . $token],
+            ]);
+
+            $data = $response->toArray(false);
+
+            return $data['ClientKey'] ?? null;
+        } catch (\Throwable $e) {
+            $this->logger->error('Saxo ClientKey fetch failed', ['error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    /**
      * Fetch historical trades from Saxo (past 12 months).
+     * Uses /cs/v1/reports/trades/{ClientKey} (not /me).
      *
      * @return list<array<string, mixed>>|null
      */
@@ -208,11 +234,20 @@ class SaxoClient
             return null;
         }
 
+        $clientKey = $this->getClientKey();
+        if ($clientKey === null) {
+            $this->logger->warning('Saxo trades: could not resolve ClientKey');
+
+            return null;
+        }
+
         try {
             $fromDate = (new \DateTimeImmutable('-12 months'))->format('Y-m-d');
             $toDate = (new \DateTimeImmutable())->format('Y-m-d');
 
-            $response = $this->httpClient->request('GET', $this->saxoApiBase . '/cs/v1/reports/trades/me', [
+            $url = $this->saxoApiBase . '/cs/v1/reports/trades/' . urlencode($clientKey);
+
+            $response = $this->httpClient->request('GET', $url, [
                 'headers' => ['Authorization' => 'Bearer ' . $token],
                 'query' => [
                     'FromDate' => $fromDate,
@@ -226,7 +261,7 @@ class SaxoClient
                     return null;
                 }
 
-                $response = $this->httpClient->request('GET', $this->saxoApiBase . '/cs/v1/reports/trades/me', [
+                $response = $this->httpClient->request('GET', $url, [
                     'headers' => ['Authorization' => 'Bearer ' . $refreshed['access_token']],
                     'query' => [
                         'FromDate' => $fromDate,
@@ -240,6 +275,7 @@ class SaxoClient
                 'status' => $response->getStatusCode(),
                 'count' => count($data['Data'] ?? []),
                 'keys' => array_keys($data),
+                'clientKey' => substr($clientKey, 0, 8) . '...',
             ]);
 
             return $data['Data'] ?? [];
