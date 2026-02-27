@@ -227,17 +227,6 @@ class TransactionImportService
             $updated += $count;
         }
 
-        // One-time cleanup: delete Saxo transactions imported with wrong field mapping
-        // (had Uic as symbol, full description as positionName). They will be re-imported correctly.
-        $deleted = $conn->executeStatement(
-            'DELETE FROM ' . $tableName . ' WHERE platform = :platform AND LENGTH(position_name) > 30',
-            ['platform' => 'saxo'],
-        );
-        if ($deleted > 0) {
-            $this->logger->info('Deleted mis-mapped Saxo transactions for re-import', ['deleted' => $deleted]);
-            $updated += $deleted;
-        }
-
         if ($updated > 0) {
             $this->logger->info('Remapped position names', ['updated' => $updated]);
         }
@@ -300,8 +289,19 @@ class TransactionImportService
             $tx->setSymbol($baseSymbol);
             $tx->setPositionName($this->symbolMap[$baseSymbol] ?? $this->symbolMap[$symbol] ?? (string) ($trade['InstrumentDescription'] ?? ''));
 
-            $buySell = strtolower((string) ($trade['BuySell'] ?? $trade['Direction'] ?? ''));
-            $tx->setType(str_contains($buySell, 'buy') ? 'buy' : 'sell');
+            // Determine buy/sell: Direction can be "Bought"/"Sold"/"None"
+            // When Direction is "None" (e.g. mutual fund subscriptions), use TradedValue sign:
+            // negative = money out = buy, positive = money in = sell
+            $direction = strtolower((string) ($trade['BuySell'] ?? $trade['Direction'] ?? ''));
+            if (str_contains($direction, 'buy') || str_contains($direction, 'bought')) {
+                $tx->setType('buy');
+            } elseif (str_contains($direction, 'sell') || str_contains($direction, 'sold')) {
+                $tx->setType('sell');
+            } else {
+                // Fallback: TradedValue sign (negative = buy, positive = sell)
+                $tradedVal = (float) ($trade['TradedValue'] ?? 0);
+                $tx->setType($tradedVal < 0 ? 'buy' : 'sell');
+            }
 
             $qty = abs((float) ($trade['Amount'] ?? 0));
             $price = (float) ($trade['Price'] ?? 0);
