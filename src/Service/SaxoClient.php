@@ -380,11 +380,18 @@ class SaxoClient
     private function saveTokens(array $tokens): void
     {
         $tokens['created_at'] = time();
+
+        // Primary: save to database (survives deploys)
+        $this->dataBuffer->store('saxo', 'tokens', $tokens);
+
+        // Secondary: save to file (fast reads, may not survive deploys)
         $dir = dirname($this->tokenFile);
         if (!is_dir($dir)) {
             mkdir($dir, 0755, true);
         }
         file_put_contents($this->tokenFile, json_encode($tokens, JSON_PRETTY_PRINT));
+
+        $this->logger->info('Saxo tokens saved to database and file');
     }
 
     /**
@@ -392,16 +399,34 @@ class SaxoClient
      */
     private function loadTokens(): ?array
     {
-        if (!file_exists($this->tokenFile)) {
-            return null;
+        // Try file first (fast)
+        if (file_exists($this->tokenFile)) {
+            $content = file_get_contents($this->tokenFile);
+            if ($content !== false) {
+                $tokens = json_decode($content, true);
+                if (is_array($tokens) && isset($tokens['access_token'])) {
+                    return $tokens;
+                }
+            }
         }
 
-        $content = file_get_contents($this->tokenFile);
-        if ($content === false) {
-            return null;
+        // Fallback: load from database (survives deploys)
+        $buffered = $this->dataBuffer->retrieve('saxo', 'tokens');
+        if ($buffered !== null && isset($buffered['data']['access_token'])) {
+            $tokens = $buffered['data'];
+            $this->logger->info('Saxo tokens restored from database');
+
+            // Re-create the file for fast subsequent reads
+            $dir = dirname($this->tokenFile);
+            if (!is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+            file_put_contents($this->tokenFile, json_encode($tokens, JSON_PRETTY_PRINT));
+
+            return $tokens;
         }
 
-        return json_decode($content, true);
+        return null;
     }
 
     /**
