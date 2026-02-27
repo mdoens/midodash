@@ -15,6 +15,7 @@ use App\Service\GoldPriceService;
 use App\Service\IbClient;
 use App\Service\MomentumService;
 use App\Service\PortfolioService;
+use App\Service\TransactionImportService;
 use App\Service\PortfolioSnapshotService;
 use App\Service\ReturnsService;
 use App\Service\SaxoClient;
@@ -106,6 +107,53 @@ class DashboardController extends AbstractController
         }
 
         return $this->json($checks);
+    }
+
+    #[Route('/health/import', name: 'health_import')]
+    public function triggerImport(
+        IbClient $ibClient,
+        SaxoClient $saxoClient,
+        TransactionImportService $importService,
+        DashboardCacheService $dashboardCache,
+    ): JsonResponse {
+        $result = [];
+
+        // IB
+        $cacheFile = $ibClient->getCacheFile();
+        if (!file_exists($cacheFile)) {
+            $result['ib'] = 'No cache file at ' . $cacheFile;
+        } else {
+            $xml = file_get_contents($cacheFile);
+            if ($xml === false) {
+                $result['ib'] = 'Could not read cache file';
+            } else {
+                $r = $importService->importFromIbXml($xml);
+                $result['ib'] = sprintf('%d imported, %d skipped', $r['imported'], $r['skipped']);
+            }
+        }
+
+        // Saxo
+        if (!$saxoClient->isAuthenticated()) {
+            $result['saxo'] = 'Not authenticated';
+        } else {
+            $trades = $saxoClient->getHistoricalTrades();
+            if ($trades === null) {
+                $result['saxo'] = 'Could not fetch trades';
+            } else {
+                $r = $importService->importFromSaxoOrders($trades);
+                $result['saxo'] = sprintf('%d imported, %d skipped', $r['imported'], $r['skipped']);
+            }
+        }
+
+        // Remap
+        $remapped = $importService->remapPositionNames();
+        $result['remapped'] = $remapped;
+
+        // Invalidate dashboard cache so returns are recalculated
+        $dashboardCache->invalidate();
+        $result['cache'] = 'invalidated';
+
+        return $this->json($result);
     }
 
     #[Route('/', name: 'dashboard')]
