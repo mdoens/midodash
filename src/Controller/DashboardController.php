@@ -224,8 +224,10 @@ class DashboardController extends AbstractController
                 } elseif ($cashTxs === []) {
                     $result['saxo_cash'] = 'No cash transactions found';
                 } else {
+                    // Delete existing Saxo cash transactions for re-import (fixes wrong field mapping)
+                    $deleted = $importService->deleteSaxoCashTransactions();
                     $r = $importService->importFromSaxoCashTransactions($cashTxs);
-                    $result['saxo_cash'] = sprintf('%d imported, %d skipped', $r['imported'], $r['skipped']);
+                    $result['saxo_cash'] = sprintf('%d imported, %d deleted+reimported', $r['imported'], $deleted);
                 }
             }
         } catch (\Throwable $e) {

@@ -380,29 +380,33 @@ class TransactionImportService
             $transaction->setPlatform('saxo');
             $transaction->setExternalId($externalId);
 
-            $dateStr = (string) ($tx['AccountValueDate'] ?? $tx['ValueDate'] ?? $tx['ExecutionTime'] ?? '');
+            $dateStr = (string) ($tx['ValueDate'] ?? $tx['Date'] ?? $tx['AccountValueDate'] ?? '');
             $transaction->setTradedAt($dateStr !== '' ? new \DateTime($dateStr) : new \DateTime());
 
-            $symbol = (string) ($tx['InstrumentSymbol'] ?? $tx['Symbol'] ?? '');
+            // Saxo nests instrument data in 'Instrument' object
+            $instrument = $tx['Instrument'] ?? [];
+            $symbol = (string) ($instrument['Symbol'] ?? $tx['InstrumentSymbol'] ?? $tx['Symbol'] ?? '');
             $baseSymbol = str_contains($symbol, ':') ? explode(':', $symbol)[0] : $symbol;
             $transaction->setSymbol($baseSymbol);
+            $description = (string) ($instrument['Description'] ?? $tx['InstrumentDescription'] ?? $tx['Description'] ?? '');
             $transaction->setPositionName(
-                $this->symbolMap[$baseSymbol] ?? $this->symbolMap[$symbol] ?? (string) ($tx['InstrumentDescription'] ?? $tx['Description'] ?? '')
+                $this->symbolMap[$baseSymbol] ?? $this->symbolMap[$symbol] ?? $description
             );
 
-            // Map Saxo transaction types
+            // Map Saxo transaction types — use Event field as fallback (more specific)
             $txType = strtolower((string) ($tx['TransactionType'] ?? ''));
-            if (str_contains($txType, 'dividend') || str_contains($txType, 'corporateaction')) {
+            $event = strtolower((string) ($tx['Event'] ?? ''));
+            if (str_contains($txType, 'corporateaction') || str_contains($event, 'dividend')) {
                 $transaction->setType('dividend');
-            } elseif (str_contains($txType, 'interest')) {
+            } elseif (str_contains($txType, 'interest') || str_contains($event, 'interest')) {
                 $transaction->setType('interest');
-            } elseif (str_contains($txType, 'commission') || str_contains($txType, 'fee')) {
+            } elseif (str_contains($txType, 'commission') || str_contains($event, 'fee') || str_contains($txType, 'cashamount')) {
                 $transaction->setType('fee');
-            } elseif (str_contains($txType, 'deposit') || str_contains($txType, 'transfer in') || str_contains($txType, 'cashin')) {
+            } elseif (str_contains($txType, 'cashtransfer') || str_contains($event, 'deposit')) {
                 $transaction->setType('deposit');
-            } elseif (str_contains($txType, 'withdrawal') || str_contains($txType, 'transfer out') || str_contains($txType, 'cashout')) {
+            } elseif (str_contains($event, 'withdrawal')) {
                 $transaction->setType('withdrawal');
-            } elseif (str_contains($txType, 'tax') || str_contains($txType, 'withholding')) {
+            } elseif (str_contains($txType, 'tax') || str_contains($event, 'withholding')) {
                 $transaction->setType('tax');
             } else {
                 // Skip trade-related transactions (already imported via importFromSaxoOrders)
@@ -412,7 +416,8 @@ class TransactionImportService
                 $transaction->setType($txType !== '' ? $txType : 'other');
             }
 
-            $amount = (float) ($tx['Amount'] ?? $tx['CashAmount'] ?? 0);
+            // Amount: BookedAmount (net) or IntradayAmount (for intraday/deposits) or Amount fallback
+            $amount = (float) ($tx['BookedAmount'] ?? $tx['IntradayAmount'] ?? $tx['Amount'] ?? $tx['CashAmount'] ?? 0);
             $transaction->setQuantity('0');
             $transaction->setPrice('0');
             $transaction->setAmount((string) $amount);
@@ -420,11 +425,9 @@ class TransactionImportService
             $currency = (string) ($tx['Currency'] ?? $tx['AccountCurrency'] ?? 'EUR');
             $transaction->setCurrency($currency);
 
-            // Saxo transactions are typically in account currency (EUR)
-            $amountInBase = (float) ($tx['AmountAccountCurrency'] ?? $tx['ConvertedAmount'] ?? $amount);
-            $fxRate = $amount != 0.0 ? abs($amountInBase / $amount) : 1.0;
-            $transaction->setFxRate((string) $fxRate);
-            $transaction->setAmountEur((string) $amountInBase);
+            // Saxo transactions are typically already in account currency (EUR)
+            $transaction->setFxRate((string) ($tx['ConversionRate'] ?? 1));
+            $transaction->setAmountEur((string) $amount);
             $transaction->setCommission('0');
 
             $this->em->persist($transaction);
@@ -438,5 +441,20 @@ class TransactionImportService
         $this->logger->info('Saxo cash transactions imported', ['imported' => $imported, 'skipped' => $skipped]);
 
         return ['imported' => $imported, 'skipped' => $skipped];
+    }
+
+    /**
+     * Delete all Saxo cash transactions (prefix 'cash_') for re-import.
+     */
+    public function deleteSaxoCashTransactions(): int
+    {
+        $conn = $this->em->getConnection();
+        $deleted = (int) $conn->executeStatement(
+            'DELETE FROM ' . $conn->quoteIdentifier('transaction') . ' WHERE platform = :platform AND external_id LIKE :prefix',
+            ['platform' => 'saxo', 'prefix' => 'cash_%']
+        );
+        $this->logger->info('Deleted Saxo cash transactions for re-import', ['deleted' => $deleted]);
+
+        return $deleted;
     }
 }
