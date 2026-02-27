@@ -81,6 +81,29 @@ class DashboardController extends AbstractController
             }
         }
 
+        // Try full template render
+        if (isset($cached) && $cached !== null) {
+            try {
+                $cached['radar_chart'] = $this->buildFactorRadarChart($chartBuilder, $cached['factors'] ?? []);
+                $checks['radar_chart'] = 'OK';
+            } catch (\Throwable $e) {
+                $checks['radar_chart'] = 'ERROR: ' . $e->getMessage();
+            }
+
+            try {
+                $cached['saxo_authenticated'] = false;
+                $cached['returns'] = $returnsService->getPortfolioReturns($cached['allocation']);
+                $cached['position_returns'] = $returnsService->getPositionReturns($cached['allocation']);
+                $cached['monthly_overview'] = $returnsService->getMonthlyOverview();
+                $history = $snapshotService->getHistory(365);
+                $cached['history'] = $history;
+                $response = $this->render('dashboard/index.html.twig', $cached);
+                $checks['full_render'] = 'OK: ' . $response->getStatusCode() . ' (' . strlen((string) $response->getContent()) . ' bytes)';
+            } catch (\Throwable $e) {
+                $checks['full_render'] = 'ERROR: ' . $e->getMessage() . ' at ' . basename($e->getFile()) . ':' . $e->getLine();
+            }
+        }
+
         return $this->json($checks);
     }
 
