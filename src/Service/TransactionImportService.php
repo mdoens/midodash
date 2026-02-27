@@ -171,7 +171,8 @@ class TransactionImportService
     }
 
     /**
-     * Update positionName for all existing transactions using the symbol_map.
+     * Update positionName for all existing transactions using the symbol_map
+     * and description-based patterns for Saxo fund names.
      */
     public function remapPositionNames(): int
     {
@@ -179,12 +180,44 @@ class TransactionImportService
         $conn = $this->em->getConnection();
         $tableName = $conn->quoteIdentifier('transaction');
 
+        // Remap by symbol
         foreach ($this->symbolMap as $symbol => $name) {
             $count = $conn->executeStatement(
                 'UPDATE ' . $tableName . ' SET position_name = :name WHERE symbol = :symbol AND position_name != :name',
                 ['name' => $name, 'symbol' => $symbol],
             );
             $updated += $count;
+        }
+
+        // Remap Saxo fund descriptions to short names (fixes old imports with full descriptions)
+        $descriptionMap = [
+            '%NORTHERN TRUST WORLD%' => 'NT World',
+            '%NORTHERN TRUST%EMERGING%' => 'NT EM',
+            '%NORTHERN TRUST%EUROPE%' => 'NT Europe',
+            '%NT EMERGING%' => 'NT EM',
+            '%NT EUROPE%' => 'NT Europe',
+            '%Ultrashort Bond%' => 'XEON',
+            '%Euro Government Bond 1-3%' => 'IBGS',
+            '%Physical Gold%' => 'EGLN',
+        ];
+
+        foreach ($descriptionMap as $pattern => $name) {
+            $count = $conn->executeStatement(
+                'UPDATE ' . $tableName . ' SET position_name = :name WHERE position_name LIKE :pattern AND position_name != :name',
+                ['name' => $name, 'pattern' => $pattern],
+            );
+            $updated += $count;
+        }
+
+        // One-time cleanup: delete Saxo transactions imported with wrong field mapping
+        // (had Uic as symbol, full description as positionName). They will be re-imported correctly.
+        $deleted = $conn->executeStatement(
+            'DELETE FROM ' . $tableName . ' WHERE platform = :platform AND LENGTH(position_name) > 30',
+            ['platform' => 'saxo'],
+        );
+        if ($deleted > 0) {
+            $this->logger->info('Deleted mis-mapped Saxo transactions for re-import', ['deleted' => $deleted]);
+            $updated += $deleted;
         }
 
         if ($updated > 0) {
