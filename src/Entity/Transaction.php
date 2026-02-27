@@ -31,7 +31,7 @@ class Transaction
     #[ORM\Column(length: 30)]
     private string $symbol;
 
-    #[ORM\Column(length: 50)]
+    #[ORM\Column(length: 255)]
     private string $positionName;
 
     #[ORM\Column(length: 20)]
