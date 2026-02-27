@@ -32,14 +32,13 @@ class CrisisService
      */
     public function checkAllSignals(): array
     {
-        $priceSignal = $this->checkPriceSignal();
+        $drawdown = $this->marketData->getDrawdown('IWDA.AS', 252);
+        $priceSignal = $this->checkPriceSignal($drawdown);
         $volatilitySignal = $this->checkVolatilitySignal();
         $creditSignal = $this->checkCreditSignal();
 
         $signals = [$priceSignal, $volatilitySignal, $creditSignal];
         $activeCount = array_sum(array_map(fn(array $s): int => $s['active'] ? 1 : 0, $signals));
-
-        $drawdown = $this->marketData->getDrawdown('IWDA.AS', 252);
 
         return [
             'crisis_triggered' => $activeCount >= 2,
@@ -54,11 +53,11 @@ class CrisisService
     }
 
     /**
+     * @param array<string, mixed> $drawdown
      * @return array{active: bool, value: float|null, threshold: int, description: string}
      */
-    private function checkPriceSignal(): array
+    private function checkPriceSignal(array $drawdown): array
     {
-        $drawdown = $this->marketData->getDrawdown('IWDA.AS', 252);
         $dd = $drawdown['drawdown_pct'] ?? 0.0;
 
         return [
@@ -80,7 +79,7 @@ class CrisisService
             return [
                 'active' => false,
                 'value' => null,
-                'threshold' => 35,
+                'threshold' => 30,
                 'sustained_days' => 0,
                 'description' => 'VIX data unavailable',
             ];

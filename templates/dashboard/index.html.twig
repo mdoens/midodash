@@ -62,8 +62,10 @@
                 <span class="badge badge--green">GEEN ACTIE</span>
             {% elseif crisisCount == 1 %}
                 <span class="badge badge--yellow">NIVEAU 1</span>
+            {% elseif crisisCount == 2 %}
+                <span class="badge badge--red">NIVEAU 2</span>
             {% else %}
-                <span class="badge badge--red">NIVEAU {{ crisisCount >= 3 ? 4 : crisisCount }}</span>
+                <span class="badge badge--red">NIVEAU 2+</span>
             {% endif %}
             {% if not saxo_authenticated %}
                 <a href="{{ path('saxo_login') }}" class="btn btn--primary">Saxo Inloggen</a>
@@ -89,7 +91,7 @@
         <div class="glass stat">
             <div class="stat__label">Totaal Vermogen</div>
             <div class="stat__value mono">{{ _self.fmtEur(allocation.total_portfolio) }}</div>
-            <div class="stat__sub">P/L: {{ _self.fmtPct((allocation.total_pl / (allocation.total_portfolio - allocation.total_pl)) * 100) }}</div>
+            <div class="stat__sub">P/L: {{ _self.fmtPct(allocation.total_invested > allocation.total_pl ? (allocation.total_pl / (allocation.total_invested - allocation.total_pl)) * 100 : 0) }}</div>
         </div>
         {% set eq = allocation.asset_classes.equity ?? {} %}
         <div class="glass stat">
@@ -366,7 +368,7 @@
                 <div class="section-label"><span class="section-label__text">Geografische Verdeling (geschat)</span></div>
                 {% set geoColors = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6'] %}
                 {% set geoEstimates = { US: 38, Europa: 28, 'Japan/Pacific': 5, EM: 12, Alternatives: 12 } %}
-                {% set geoTargets = { US: 43, Europa: 26, 'Japan/Pacific': 7, EM: 16, Alternatives: 8 } %}
+                {% set geoTargets = { US: 40, Europa: 18, 'Japan/Pacific': 7, EM: 20, Alternatives: 15 } %}
                 {% set i = 0 %}
                 {% for geo, target in geoTargets %}
                     {% set current = geoEstimates[geo] ?? 0 %}
