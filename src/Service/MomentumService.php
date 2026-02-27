@@ -131,6 +131,11 @@ class MomentumService
     {
         $scores = [];
         foreach (self::TICKERS as $ticker => $info) {
+            // Skip cash positions — momentum scores are not meaningful for cash equivalents
+            if ($info['cash']) {
+                continue;
+            }
+
             $prices = $this->fetchMonthlyPrices($ticker);
             $returns = $this->monthlyReturns($prices);
             $score = $this->momentumScore($returns);
@@ -142,7 +147,7 @@ class MomentumService
                 'name' => $info['name'],
                 'role' => $info['role'],
                 'equity' => $info['equity'],
-                'cash' => $info['cash'],
+                'cash' => false,
                 'score' => $score,
                 'last_price' => $lastPrice,
             ];
