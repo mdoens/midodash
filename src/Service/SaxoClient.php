@@ -436,14 +436,23 @@ class SaxoClient
                 $duration = $order['Duration'] ?? [];
                 $durationStr = is_array($duration) ? ($duration['DurationType'] ?? 'Unknown') : (string) $duration;
 
+                $amount = (float) ($order['Amount'] ?? 0);
+                $cashAmount = (float) ($order['CashAmount'] ?? 0);
+                $price = (float) ($order['Price'] ?? 0);
+
+                // Order value: CashAmount for cash-based orders (mutual funds), or Amount * Price for limit orders
+                $orderValue = $cashAmount > 0 ? $cashAmount : ($amount > 0 && $price > 0 ? $amount * $price : 0.0);
+
                 $orders[] = [
                     'order_id' => (string) ($order['OrderId'] ?? ''),
                     'symbol' => (string) ($display['Symbol'] ?? ($order['Uic'] ?? '?')),
                     'description' => (string) ($display['Description'] ?? ''),
                     'buy_sell' => $buySell,
-                    'amount' => (float) ($order['Amount'] ?? 0),
+                    'amount' => $amount,
+                    'cash_amount' => $cashAmount,
                     'order_type' => (string) ($order['OrderType'] ?? 'Unknown'),
-                    'price' => (float) ($order['Price'] ?? 0),
+                    'price' => $price,
+                    'order_value' => $orderValue,
                     'duration' => $durationStr,
                     'status' => $status,
                 ];
@@ -807,20 +816,26 @@ class SaxoClient
             return null;
         }
 
-        if (isset($tokens['created_at'], $tokens['refresh_token_expires_in'])) {
-            $refreshExpiresAt = (int) $tokens['created_at'] + (int) $tokens['refresh_token_expires_in'];
-            if (time() > $refreshExpiresAt) {
-                return null;
-            }
-        }
-
         if (isset($tokens['created_at'], $tokens['expires_in'])) {
             $expiresAt = (int) $tokens['created_at'] + (int) $tokens['expires_in'];
-            if (time() > $expiresAt - 120) {
-                $refreshed = $this->refreshToken();
 
-                return $refreshed['access_token'] ?? null;
+            // Access token still valid — use it regardless of refresh token status
+            if (time() <= $expiresAt - 120) {
+                return $tokens['access_token'];
             }
+
+            // Access token expiring soon — try refresh if refresh token is still valid
+            if (isset($tokens['refresh_token_expires_in'])) {
+                $refreshExpiresAt = (int) $tokens['created_at'] + (int) $tokens['refresh_token_expires_in'];
+                if (time() > $refreshExpiresAt) {
+                    // Both tokens expired — need re-auth
+                    return null;
+                }
+            }
+
+            $refreshed = $this->refreshToken();
+
+            return $refreshed['access_token'] ?? null;
         }
 
         return $tokens['access_token'];

@@ -6,6 +6,9 @@ framework:
     # Store sessions outside cache dir so they survive cache:clear after deploys
     session:
         save_path: '%kernel.project_dir%/var/sessions'
+        cookie_lifetime: 604800
+        cookie_secure: auto
+        gc_maxlifetime: 604800
 
     #esi: true
     #fragments: true

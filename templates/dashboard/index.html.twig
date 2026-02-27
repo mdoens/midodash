@@ -302,10 +302,14 @@
 
         {# ── Saxo Open Orders ── #}
         {% if saxo_open_orders is defined and saxo_open_orders|length > 0 %}
+        {% set totalOrderValue = 0 %}
+        {% for order in saxo_open_orders %}
+            {% set totalOrderValue = totalOrderValue + (order.order_value ?? 0) %}
+        {% endfor %}
         <div class="glass glass--yellow mt-16">
             <div class="section-label"><span class="section-label__text">Open Orders (Saxo)</span></div>
             <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">
-                {{ saxo_open_orders|length }} openstaande order(s) — waarde nog niet in posities opgenomen
+                {{ saxo_open_orders|length }} openstaande order(s){% if totalOrderValue > 0 %} — totaal {{ _self.fmtEur(totalOrderValue) }} (onderdeel van Saxo cash){% endif %}
             </div>
             <div style="overflow-x: auto;">
                 <table>
@@ -313,7 +317,7 @@
                         <tr>
                             <th>Instrument</th>
                             <th>Richting</th>
-                            <th style="text-align:right;">Aantal</th>
+                            <th style="text-align:right;">Waarde</th>
                             <th>Type</th>
                             <th style="text-align:right;">Prijs</th>
                             <th>Duur</th>
@@ -332,7 +336,7 @@
                                     {{ order.buy_sell }}
                                 </span>
                             </td>
-                            <td style="text-align:right;" class="mono">{{ order.amount|number_format(0, ',', '.') }}</td>
+                            <td style="text-align:right;" class="mono">{{ (order.order_value ?? 0) > 0 ? _self.fmtEur(order.order_value) : '—' }}</td>
                             <td class="text-muted">{{ order.order_type }}</td>
                             <td style="text-align:right;" class="mono">{{ order.price > 0 ? order.price|number_format(2, ',', '.') : 'Market' }}</td>
                             <td class="text-muted">{{ order.duration }}</td>
@@ -388,13 +392,19 @@
                         </tr>
                         {% endfor %}
                         {# Cash row #}
+                        {% set ordersTotal = 0 %}
+                        {% if saxo_open_orders is defined %}
+                            {% for o in saxo_open_orders %}
+                                {% set ordersTotal = ordersTotal + (o.order_value ?? 0) %}
+                            {% endfor %}
+                        {% endif %}
                         <tr style="border-top: 2px solid rgba(148,163,184,0.15);">
                             <td class="fw-600 text-muted">Cash (niet belegd)</td>
                             <td><span class="text-muted" style="font-size: 10px;">IB+Saxo</span></td>
                             <td class="text-right fw-600 mono">{{ _self.fmtEur(allocation.total_cash) }}</td>
                             <td class="text-right fw-700 mono">{{ allocation.cash_pct|number_format(1) }}%</td>
                             <td colspan="5" class="text-muted" style="font-size: 11px;">
-                                IB: {{ _self.fmtEur(allocation.ib_cash) }} | Saxo: {{ _self.fmtEur(allocation.saxo_cash) }}
+                                IB: {{ _self.fmtEur(allocation.ib_cash) }} | Saxo: {{ _self.fmtEur(allocation.saxo_cash) }}{% if ordersTotal > 0 %} (wv. {{ _self.fmtEur(ordersTotal) }} in open orders){% endif %}
                             </td>
                         </tr>
                     </tbody>

@@ -159,6 +159,13 @@ php bin/console cache:clear
 - Commit after every meaningful step — small atomic commits
 - Never amend or force-push shared branches
 
+### Changelog
+- Maintain `CHANGELOG.md` in the project root
+- Update the changelog with EVERY deploy — this is mandatory, not optional
+- Format: group entries by date, use `### Added`, `### Fixed`, `### Changed`, `### Removed` sections
+- Write entries in Dutch (user's language), concise but clear
+- Include the git commit hash for traceability
+
 ---
 
 ## Symfony Rules
