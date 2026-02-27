@@ -115,6 +115,31 @@ class DashboardController extends AbstractController
         return $this->json($checks);
     }
 
+    #[Route('/health/ib', name: 'health_ib')]
+    public function debugIb(IbClient $ibClient, DataBufferService $dataBuffer): JsonResponse
+    {
+        $cacheFile = $ibClient->getCacheFile();
+        $cacheTimestamp = $ibClient->getCacheTimestamp();
+        $positionsBuffer = $dataBuffer->retrieve('ib', 'positions');
+        $cashBuffer = $dataBuffer->retrieve('ib', 'cash_report');
+
+        $posBufferedAt = $positionsBuffer !== null
+            ? $positionsBuffer['fetched_at']->format('Y-m-d H:i:s') : null;
+        $cashBufferedAt = $cashBuffer !== null
+            ? $cashBuffer['fetched_at']->format('Y-m-d H:i:s') : null;
+
+        return new JsonResponse([
+            'cache_file_exists' => file_exists($cacheFile),
+            'cache_file_size' => file_exists($cacheFile) ? filesize($cacheFile) : 0,
+            'cache_file_age_seconds' => $cacheTimestamp !== null ? time() - $cacheTimestamp->getTimestamp() : null,
+            'cache_file_timestamp' => $cacheTimestamp?->format('Y-m-d H:i:s'),
+            'positions_buffered' => $positionsBuffer !== null,
+            'positions_buffered_at' => $posBufferedAt,
+            'cash_buffered' => $cashBuffer !== null,
+            'cash_buffered_at' => $cashBufferedAt,
+        ]);
+    }
+
     #[Route('/health/saxo', name: 'health_saxo')]
     public function debugSaxo(SaxoClient $saxoClient, DataBufferService $dataBuffer): JsonResponse
     {
@@ -375,6 +400,7 @@ class DashboardController extends AbstractController
         }
 
         $ibCashBalance = (float) ($ibCash['ending_cash'] ?? 0);
+        $ibDataTimestamp = $ibClient->getCacheTimestamp();
 
         // ── Saxo data ──
         $saxoError = false;
@@ -559,6 +585,8 @@ class DashboardController extends AbstractController
             'saxo_currency_exposure' => $saxoCurrencyExposure,
             'saxo_cash_for_trading' => $saxoCashForTrading,
             'saxo_cost_to_close' => $saxoCostToClose,
+            'ib_data_timestamp' => $ibDataTimestamp?->format('d M H:i'),
+            'saxo_data_timestamp' => $saxoAuthenticated ? 'live' : null,
         ];
     }
 

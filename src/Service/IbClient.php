@@ -151,6 +151,17 @@ class IbClient
         return $this->cacheFile;
     }
 
+    public function getCacheTimestamp(): ?\DateTimeImmutable
+    {
+        if (!file_exists($this->cacheFile)) {
+            return null;
+        }
+
+        $mtime = filemtime($this->cacheFile);
+
+        return $mtime !== false ? (new \DateTimeImmutable())->setTimestamp($mtime) : null;
+    }
+
     /**
      * @return array<int, array<string, mixed>>
      */
