@@ -118,36 +118,47 @@ class DashboardController extends AbstractController
     ): JsonResponse {
         $result = [];
 
-        // IB
-        $cacheFile = $ibClient->getCacheFile();
-        if (!file_exists($cacheFile)) {
-            $result['ib'] = 'No cache file at ' . $cacheFile;
-        } else {
-            $xml = file_get_contents($cacheFile);
-            if ($xml === false) {
-                $result['ib'] = 'Could not read cache file';
+        try {
+            // IB
+            $cacheFile = $ibClient->getCacheFile();
+            if (!file_exists($cacheFile)) {
+                $result['ib'] = 'No cache file at ' . $cacheFile;
             } else {
-                $r = $importService->importFromIbXml($xml);
-                $result['ib'] = sprintf('%d imported, %d skipped', $r['imported'], $r['skipped']);
+                $xml = file_get_contents($cacheFile);
+                if ($xml === false) {
+                    $result['ib'] = 'Could not read cache file';
+                } else {
+                    $r = $importService->importFromIbXml($xml);
+                    $result['ib'] = sprintf('%d imported, %d skipped', $r['imported'], $r['skipped']);
+                }
             }
+        } catch (\Throwable $e) {
+            $result['ib'] = 'ERROR: ' . $e->getMessage();
         }
 
-        // Saxo
-        if (!$saxoClient->isAuthenticated()) {
-            $result['saxo'] = 'Not authenticated';
-        } else {
-            $trades = $saxoClient->getHistoricalTrades();
-            if ($trades === null) {
-                $result['saxo'] = 'Could not fetch trades';
+        try {
+            // Saxo
+            if (!$saxoClient->isAuthenticated()) {
+                $result['saxo'] = 'Not authenticated';
             } else {
-                $r = $importService->importFromSaxoOrders($trades);
-                $result['saxo'] = sprintf('%d imported, %d skipped', $r['imported'], $r['skipped']);
+                $trades = $saxoClient->getHistoricalTrades();
+                if ($trades === null) {
+                    $result['saxo'] = 'Could not fetch trades';
+                } else {
+                    $r = $importService->importFromSaxoOrders($trades);
+                    $result['saxo'] = sprintf('%d imported, %d skipped', $r['imported'], $r['skipped']);
+                }
             }
+        } catch (\Throwable $e) {
+            $result['saxo'] = 'ERROR: ' . $e->getMessage();
         }
 
-        // Remap
-        $remapped = $importService->remapPositionNames();
-        $result['remapped'] = $remapped;
+        try {
+            $remapped = $importService->remapPositionNames();
+            $result['remapped'] = $remapped;
+        } catch (\Throwable $e) {
+            $result['remap'] = 'ERROR: ' . $e->getMessage();
+        }
 
         // Invalidate dashboard cache so returns are recalculated
         $dashboardCache->invalidate();
