@@ -171,6 +171,24 @@ class TransactionImportService
     }
 
     /**
+     * Delete all transactions for a given platform (for re-import).
+     */
+    public function deletePlatformTransactions(string $platform): int
+    {
+        $conn = $this->em->getConnection();
+        $table = $conn->quoteIdentifier('transaction');
+
+        $deleted = $conn->executeStatement(
+            'DELETE FROM ' . $table . ' WHERE platform = :platform',
+            ['platform' => $platform],
+        );
+
+        $this->logger->info('Deleted platform transactions', ['platform' => $platform, 'deleted' => $deleted]);
+
+        return $deleted;
+    }
+
+    /**
      * Update positionName for all existing transactions using the symbol_map
      * and description-based patterns for Saxo fund names.
      */

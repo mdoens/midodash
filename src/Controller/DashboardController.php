@@ -157,15 +157,27 @@ class DashboardController extends AbstractController
             if (!$saxoClient->isAuthenticated()) {
                 $result['saxo'] = 'Not authenticated';
             } else {
+                // Delete existing Saxo transactions for clean re-import with corrected field mapping
+                $result['saxo_deleted'] = $importService->deletePlatformTransactions('saxo');
+
                 $trades = $saxoClient->getHistoricalTrades();
                 if ($trades === null) {
                     $result['saxo'] = 'Could not fetch trades (null)';
                 } elseif ($trades === []) {
                     $result['saxo'] = 'Empty trade list — API returned 0 trades';
-                    $result['saxo_debug'] = 'Try /cs/v1/audit/orderactivities or check if trades exist in Saxo';
                 } else {
                     $result['saxo_count'] = count($trades);
-                    $result['saxo_sample'] = array_keys($trades[0]);
+                    // Show key fields from each trade for debugging
+                    $result['saxo_trades'] = array_map(fn(array $t): array => [
+                        'InstrumentSymbol' => $t['InstrumentSymbol'] ?? '?',
+                        'InstrumentDescription' => $t['InstrumentDescription'] ?? '?',
+                        'Direction' => $t['Direction'] ?? '?',
+                        'Amount' => $t['Amount'] ?? '?',
+                        'Price' => $t['Price'] ?? '?',
+                        'TradedValue' => $t['TradedValue'] ?? '?',
+                        'BookedAmountClientCurrency' => $t['BookedAmountClientCurrency'] ?? '?',
+                        'TradeDate' => $t['TradeDate'] ?? '?',
+                    ], $trades);
                     $r = $importService->importFromSaxoOrders($trades);
                     $result['saxo'] = sprintf('%d imported, %d skipped', $r['imported'], $r['skipped']);
                 }
