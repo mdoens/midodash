@@ -640,17 +640,116 @@
        TAB 6: HISTORIE
        ════════════════════════════════════════════════════════════════ #}
     <div class="tab-panel" data-tabs-target="panel" data-panel="history">
+        {% set r = returns|default({}) %}
+
+        {# ── Portfolio Rendement stat cards ── #}
+        {% if r.net_deposits|default(0) > 0 %}
+        <div class="grid grid--5 mb-20">
+            <div class="glass stat">
+                <div class="stat__label">Totaal Gestort</div>
+                <div class="stat__value mono">{{ _self.fmtEur(r.total_deposits) }}</div>
+                <div class="stat__sub">Netto: {{ _self.fmtEur(r.net_deposits) }}</div>
+            </div>
+            <div class="glass stat">
+                <div class="stat__label">Huidige Waarde</div>
+                <div class="stat__value mono">{{ _self.fmtEur(r.current_value) }}</div>
+            </div>
+            <div class="glass stat">
+                <div class="stat__label">Rendement</div>
+                <div class="stat__value mono {{ r.total_return >= 0 ? 'text-green' : 'text-red' }}">{{ r.total_return >= 0 ? '+' : '' }}{{ _self.fmtEur(r.total_return) }}</div>
+                <div class="stat__sub {{ r.total_return_pct >= 0 ? 'text-green' : 'text-red' }}">{{ _self.fmtPct(r.total_return_pct) }}</div>
+            </div>
+            <div class="glass stat">
+                <div class="stat__label">Dividend</div>
+                <div class="stat__value mono text-green">{{ _self.fmtEur(r.total_dividends) }}</div>
+                <div class="stat__sub">Rente: {{ _self.fmtEur(r.total_interest) }}</div>
+            </div>
+            <div class="glass stat">
+                <div class="stat__label">Commissie</div>
+                <div class="stat__value mono text-red">{{ _self.fmtEur(r.total_commission) }}</div>
+            </div>
+        </div>
+        {% endif %}
+
+        {# ── Per-positie rendement tabel ── #}
+        {% if position_returns|default([])|length > 0 %}
+        <div class="glass">
+            <div class="section-label"><span class="section-label__text">Rendement per Positie</span></div>
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="text-align: left;">Positie</th>
+                            <th style="text-align: right;">Gekocht</th>
+                            <th style="text-align: right;">Verkocht</th>
+                            <th style="text-align: right;">Huidig</th>
+                            <th style="text-align: right;">Unrealized P/L</th>
+                            <th style="text-align: right;">Dividend</th>
+                            <th style="text-align: right;">Totaal Return</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pos in position_returns %}
+                        <tr>
+                            <td>{{ pos.name }}{% if pos.source|default('transactions') == 'live' %} <span class="text-muted" style="font-size: 10px;" title="Cost basis afgeleid van live P/L (geen transactiedata)">*</span>{% endif %}</td>
+                            <td style="text-align: right;" class="mono">{{ _self.fmtEur(pos.total_bought) }}</td>
+                            <td style="text-align: right;" class="mono">{{ pos.total_sold > 0 ? _self.fmtEur(pos.total_sold) : '-' }}</td>
+                            <td style="text-align: right;" class="mono">{{ pos.current_value > 0 ? _self.fmtEur(pos.current_value) : '-' }}</td>
+                            <td style="text-align: right;" class="mono {{ pos.unrealized_pl >= 0 ? 'text-green' : 'text-red' }}">{{ pos.unrealized_pl != 0 ? (pos.unrealized_pl >= 0 ? '+' : '') ~ _self.fmtEur(pos.unrealized_pl) : '-' }}</td>
+                            <td style="text-align: right;" class="mono {{ pos.dividends > 0 ? 'text-green' : '' }}">{{ pos.dividends > 0 ? _self.fmtEur(pos.dividends) : '-' }}</td>
+                            <td style="text-align: right;" class="mono {{ pos.total_return >= 0 ? 'text-green' : 'text-red' }}">{{ pos.total_return >= 0 ? '+' : '' }}{{ _self.fmtEur(pos.total_return) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        {# ── Transactieoverzicht per maand ── #}
+        {% if monthly_overview|default([])|length > 0 %}
+        <div class="glass mt-16">
+            <div class="section-label"><span class="section-label__text">Transacties per Maand</span></div>
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="text-align: left;">Maand</th>
+                            <th style="text-align: right;">Stortingen</th>
+                            <th style="text-align: right;">Kopen</th>
+                            <th style="text-align: right;">Verkopen</th>
+                            <th style="text-align: right;">Dividend</th>
+                            <th style="text-align: right;">Commissie</th>
+                            <th style="text-align: right;">Rente</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in monthly_overview %}
+                        <tr>
+                            <td>{{ row.month }}</td>
+                            <td style="text-align: right;" class="mono">{{ row.deposits > 0 ? _self.fmtEur(row.deposits) : '-' }}</td>
+                            <td style="text-align: right;" class="mono">{{ row.buys > 0 ? _self.fmtEur(row.buys) : '-' }}</td>
+                            <td style="text-align: right;" class="mono">{{ row.sells > 0 ? _self.fmtEur(row.sells) : '-' }}</td>
+                            <td style="text-align: right;" class="mono {{ row.dividends > 0 ? 'text-green' : '' }}">{{ row.dividends > 0 ? _self.fmtEur(row.dividends) : '-' }}</td>
+                            <td style="text-align: right;" class="mono text-red">{{ row.commissions > 0 ? _self.fmtEur(row.commissions) : '-' }}</td>
+                            <td style="text-align: right;" class="mono">{{ row.interest > 0 ? _self.fmtEur(row.interest) : '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        {# ── Portfolio waarde chart (als er snapshots zijn) ── #}
         {% if history|default([])|length > 1 %}
-        <div class="grid grid--2">
-            {# Portfolio Value Chart #}
+        <div class="grid grid--2 mt-16">
             <div class="glass">
                 <div class="section-label"><span class="section-label__text">Portfolio Waarde</span></div>
                 <div class="chart-wrap chart-wrap--h280">
                     {{ render_chart(history_chart) }}
                 </div>
             </div>
-
-            {# Asset Allocation Over Time #}
             <div class="glass">
                 <div class="section-label"><span class="section-label__text">Asset Allocatie</span></div>
                 <div class="chart-wrap chart-wrap--h280">
@@ -658,50 +757,12 @@
                 </div>
             </div>
         </div>
+        {% endif %}
 
-        {# Monthly Returns Table #}
-        <div class="glass mt-16">
-            <div class="section-label"><span class="section-label__text">Maandelijks Rendement</span></div>
-            <div style="overflow-x: auto;">
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="text-align: left;">Maand</th>
-                            <th style="text-align: right;">Beginwaarde</th>
-                            <th style="text-align: right;">Eindwaarde</th>
-                            <th style="text-align: right;">Rendement</th>
-                            <th style="text-align: right;">%</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% set monthlyData = {} %}
-                        {% for snap in history|default([]) %}
-                            {% set month = snap.date[:7] %}
-                            {% if monthlyData[month] is not defined %}
-                                {% set monthlyData = monthlyData|merge({(month): {first: snap.total_value, last: snap.total_value}}) %}
-                            {% else %}
-                                {% set monthlyData = monthlyData|merge({(month): {first: monthlyData[month].first, last: snap.total_value}}) %}
-                            {% endif %}
-                        {% endfor %}
-                        {% for month, data in monthlyData|reverse %}
-                            {% set ret = data.last - data.first %}
-                            {% set retPct = data.first > 0 ? ((data.last - data.first) / data.first * 100) : 0 %}
-                            <tr>
-                                <td>{{ month }}</td>
-                                <td style="text-align: right;" class="mono">€{{ data.first|number_format(0, ',', '.') }}</td>
-                                <td style="text-align: right;" class="mono">€{{ data.last|number_format(0, ',', '.') }}</td>
-                                <td style="text-align: right;" class="mono {{ ret >= 0 ? 'text-green' : 'text-red' }}">{{ ret >= 0 ? '+' : '' }}€{{ ret|number_format(0, ',', '.') }}</td>
-                                <td style="text-align: right;" class="mono {{ retPct >= 0 ? 'text-green' : 'text-red' }}">{{ retPct >= 0 ? '+' : '' }}{{ retPct|number_format(1) }}%</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-        {% else %}
+        {% if r.net_deposits|default(0) == 0 and history|default([])|length <= 1 %}
         <div class="glass">
             <div style="text-align: center; padding: 40px; color: #94a3b8;">
-                Nog geen historische data beschikbaar. Portfolio snapshots worden dagelijks opgeslagen.
+                Nog geen transactiedata beschikbaar. Importeer transacties via <code>app:transactions:import</code>.
             </div>
         </div>
         {% endif %}

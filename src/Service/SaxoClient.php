@@ -196,6 +196,56 @@ class SaxoClient
         }
     }
 
+    /**
+     * Fetch historical trades from Saxo (past 12 months).
+     *
+     * @return list<array<string, mixed>>|null
+     */
+    public function getHistoricalTrades(): ?array
+    {
+        $token = $this->getValidToken();
+        if ($token === null) {
+            return null;
+        }
+
+        try {
+            $fromDate = (new \DateTimeImmutable('-12 months'))->format('Y-m-d');
+            $toDate = (new \DateTimeImmutable())->format('Y-m-d');
+
+            $response = $this->httpClient->request('GET', $this->saxoApiBase . '/cs/v1/reports/trades/me', [
+                'headers' => ['Authorization' => 'Bearer ' . $token],
+                'query' => [
+                    'FromDate' => $fromDate,
+                    'ToDate' => $toDate,
+                ],
+            ]);
+
+            if ($response->getStatusCode() === 401) {
+                $refreshed = $this->refreshToken();
+                if ($refreshed === null) {
+                    return null;
+                }
+
+                $response = $this->httpClient->request('GET', $this->saxoApiBase . '/cs/v1/reports/trades/me', [
+                    'headers' => ['Authorization' => 'Bearer ' . $refreshed['access_token']],
+                    'query' => [
+                        'FromDate' => $fromDate,
+                        'ToDate' => $toDate,
+                    ],
+                ]);
+            }
+
+            $data = $response->toArray(false);
+            $this->logger->info('Saxo historical trades fetched', ['count' => count($data['Data'] ?? [])]);
+
+            return $data['Data'] ?? [];
+        } catch (\Throwable $e) {
+            $this->logger->error('Saxo historical trades fetch failed', ['error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
     public function isAuthenticated(): bool
     {
         $cached = $this->loadCache();

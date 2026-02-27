@@ -8,14 +8,23 @@ use App\Entity\Transaction;
 use App\Repository\TransactionRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\Yaml\Yaml;
 
 class TransactionImportService
 {
+    /** @var array<string, string> */
+    private readonly array $symbolMap;
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly TransactionRepository $repository,
         private readonly LoggerInterface $logger,
-    ) {}
+        private readonly string $projectDir,
+    ) {
+        $file = $this->projectDir . '/config/mido_v65.yaml';
+        $yaml = file_exists($file) ? Yaml::parseFile($file) : [];
+        $this->symbolMap = $yaml['mido']['symbol_map'] ?? [];
+    }
 
     /**
      * Import transactions from IB Flex XML content.
@@ -63,8 +72,9 @@ class TransactionImportService
             $timeStr = $attrs['tradeTime'] ?? '';
             $tx->setTradedAt($this->parseIbDateTime($dateStr, $timeStr));
 
-            $tx->setSymbol($attrs['symbol'] ?? '');
-            $tx->setPositionName($attrs['description'] ?? '');
+            $symbol = $attrs['symbol'] ?? '';
+            $tx->setSymbol($symbol);
+            $tx->setPositionName($this->symbolMap[$symbol] ?? $attrs['description'] ?? '');
 
             // Determine type from buySell and assetCategory
             $buySell = strtolower($attrs['buySell'] ?? '');
@@ -114,8 +124,9 @@ class TransactionImportService
             $tx->setPlatform('ib');
             $tx->setExternalId($externalId);
             $tx->setTradedAt($this->parseIbDateTime($attrs['dateTime'] ?? $attrs['reportDate'] ?? '', ''));
-            $tx->setSymbol($attrs['symbol'] ?? '');
-            $tx->setPositionName($attrs['description'] ?? '');
+            $symbol = $attrs['symbol'] ?? '';
+            $tx->setSymbol($symbol);
+            $tx->setPositionName($this->symbolMap[$symbol] ?? $attrs['description'] ?? '');
 
             // Map IB cash transaction types
             $ibType = strtolower($attrs['type'] ?? '');
@@ -157,6 +168,29 @@ class TransactionImportService
         return ['imported' => $imported, 'skipped' => $skipped];
     }
 
+    /**
+     * Update positionName for all existing transactions using the symbol_map.
+     */
+    public function remapPositionNames(): int
+    {
+        $updated = 0;
+        $conn = $this->em->getConnection();
+
+        foreach ($this->symbolMap as $symbol => $name) {
+            $count = $conn->executeStatement(
+                'UPDATE transaction SET position_name = :name WHERE symbol = :symbol AND position_name != :name',
+                ['name' => $name, 'symbol' => $symbol],
+            );
+            $updated += $count;
+        }
+
+        if ($updated > 0) {
+            $this->logger->info('Remapped position names', ['updated' => $updated]);
+        }
+
+        return $updated;
+    }
+
     private function parseIbDateTime(string $date, string $time): \DateTime
     {
         // IB formats: "20260227" or "2026-02-27" or "20260227;153000"
@@ -176,18 +210,20 @@ class TransactionImportService
     }
 
     /**
-     * Import from Saxo order history.
+     * Import from Saxo trade reports (/cs/v1/reports/trades).
      *
-     * @param list<array<string, mixed>> $orders from Saxo API
+     * @param list<array<string, mixed>> $trades from Saxo API
+     *
      * @return array{imported: int, skipped: int}
      */
-    public function importFromSaxoOrders(array $orders): array
+    public function importFromSaxoOrders(array $trades): array
     {
         $imported = 0;
         $skipped = 0;
 
-        foreach ($orders as $order) {
-            $externalId = (string) ($order['OrderId'] ?? '');
+        foreach ($trades as $trade) {
+            // Trade reports use TradeId; fallback to OrderId
+            $externalId = (string) ($trade['TradeId'] ?? $trade['OrderId'] ?? '');
             if ($externalId === '') {
                 continue;
             }
@@ -201,26 +237,36 @@ class TransactionImportService
             $tx->setPlatform('saxo');
             $tx->setExternalId($externalId);
 
-            $dateStr = (string) ($order['ExecutionTime'] ?? $order['OrderTime'] ?? '');
+            $dateStr = (string) ($trade['ExecutionTime'] ?? $trade['TradeTime'] ?? $trade['OrderTime'] ?? '');
             $tx->setTradedAt($dateStr !== '' ? new \DateTime($dateStr) : new \DateTime());
 
             /** @var array<string, string> $displayFormat */
-            $displayFormat = $order['DisplayAndFormat'] ?? [];
-            $tx->setSymbol((string) ($displayFormat['Symbol'] ?? ($order['Uic'] ?? '')));
-            $tx->setPositionName((string) ($displayFormat['Description'] ?? ''));
+            $displayFormat = $trade['DisplayAndFormat'] ?? [];
+            $symbol = (string) ($displayFormat['Symbol'] ?? $trade['Symbol'] ?? ($trade['Uic'] ?? ''));
+            $tx->setSymbol($symbol);
+            $tx->setPositionName($this->symbolMap[$symbol] ?? (string) ($displayFormat['Description'] ?? $trade['InstrumentDescription'] ?? ''));
 
-            $buySell = strtolower((string) ($order['BuySell'] ?? ''));
+            $buySell = strtolower((string) ($trade['BuySell'] ?? $trade['Direction'] ?? ''));
             $tx->setType(str_contains($buySell, 'buy') ? 'buy' : 'sell');
 
-            $tx->setQuantity((string) abs((float) ($order['Amount'] ?? 0)));
-            $tx->setPrice((string) ($order['Price'] ?? $order['FilledPrice'] ?? 0));
+            $qty = abs((float) ($trade['Amount'] ?? $trade['ExecutedAmount'] ?? 0));
+            $price = (float) ($trade['Price'] ?? $trade['FilledPrice'] ?? $trade['ExecutionPrice'] ?? 0);
+            $tx->setQuantity((string) $qty);
+            $tx->setPrice((string) $price);
 
-            $amount = (float) ($order['Amount'] ?? 0) * (float) ($order['Price'] ?? $order['FilledPrice'] ?? 0);
+            $amount = $qty * $price;
             $tx->setAmount((string) $amount);
-            $tx->setCurrency((string) ($displayFormat['Currency'] ?? 'EUR'));
-            $tx->setFxRate('1');
-            $tx->setAmountEur((string) $amount);
-            $tx->setCommission((string) ($order['Commission'] ?? 0));
+
+            $currency = (string) ($displayFormat['Currency'] ?? $trade['TradeCurrency'] ?? 'EUR');
+            $tx->setCurrency($currency);
+
+            // FX conversion: Saxo provides BookedAmountInBaseCurrency for EUR-denominated total
+            $amountEur = (float) ($trade['BookedAmountInBaseCurrency'] ?? $amount);
+            $fxRate = $amount > 0 ? $amountEur / $amount : 1.0;
+            $tx->setFxRate((string) $fxRate);
+            $tx->setAmountEur((string) $amountEur);
+
+            $tx->setCommission((string) ($trade['Commission'] ?? $trade['CostBuy'] ?? $trade['CostSell'] ?? 0));
 
             $this->em->persist($tx);
             $imported++;

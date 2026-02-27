@@ -16,6 +16,7 @@ use App\Service\IbClient;
 use App\Service\MomentumService;
 use App\Service\PortfolioService;
 use App\Service\PortfolioSnapshotService;
+use App\Service\ReturnsService;
 use App\Service\SaxoClient;
 use App\Service\TriggerService;
 use Psr\Log\LoggerInterface;
@@ -44,6 +45,7 @@ class DashboardController extends AbstractController
         DashboardCacheService $dashboardCache,
         DataBufferService $dataBuffer,
         PortfolioSnapshotService $snapshotService,
+        ReturnsService $returnsService,
         ChartBuilderInterface $chartBuilder,
         LoggerInterface $logger,
     ): Response {
@@ -66,6 +68,11 @@ class DashboardController extends AbstractController
                 $cached['history_chart'] = $this->buildHistoryChart($chartBuilder, $history);
                 $cached['allocation_chart'] = $this->buildAllocationHistoryChart($chartBuilder, $history);
             }
+
+            // Returns data from transactions
+            $cached['returns'] = $returnsService->getPortfolioReturns($cached['allocation']);
+            $cached['position_returns'] = $returnsService->getPositionReturns($cached['allocation']);
+            $cached['monthly_overview'] = $returnsService->getMonthlyOverview();
 
             return $this->render('dashboard/index.html.twig', $cached);
         }
@@ -110,6 +117,11 @@ class DashboardController extends AbstractController
             $data['history_chart'] = $this->buildHistoryChart($chartBuilder, $history);
             $data['allocation_chart'] = $this->buildAllocationHistoryChart($chartBuilder, $history);
         }
+
+        // Returns data from transactions
+        $data['returns'] = $returnsService->getPortfolioReturns($data['allocation']);
+        $data['position_returns'] = $returnsService->getPositionReturns($data['allocation']);
+        $data['monthly_overview'] = $returnsService->getMonthlyOverview();
 
         return $this->render('dashboard/index.html.twig', $data);
     }

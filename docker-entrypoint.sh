@@ -19,6 +19,10 @@ php /var/www/html/bin/console app:saxo:refresh || true
 echo "Pre-fetching IB data..."
 php /var/www/html/bin/console app:ib:fetch || true
 
+# Import IB transactions into database
+echo "Importing IB transactions..."
+php /var/www/html/bin/console app:transactions:import || true
+
 # Warmup momentum cache on startup
 echo "Warming up momentum cache..."
 php /var/www/html/bin/console app:momentum:warmup || true
