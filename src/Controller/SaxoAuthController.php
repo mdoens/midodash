@@ -25,21 +25,22 @@ class SaxoAuthController extends AbstractController
     #[Route('/saxo/callback', name: 'saxo_callback')]
     public function callback(SaxoClient $saxoClient, DashboardCacheService $dashboardCache, Request $request): Response
     {
-        $state = $request->query->get('state', '');
-        $expectedState = $request->getSession()->get('saxo_state', '');
-        $request->getSession()->remove('saxo_state');
-
-        if ($state === '' || $state !== $expectedState) {
-            $this->addFlash('error', 'Ongeldige state parameter — mogelijke CSRF-aanval.');
-
-            return $this->redirectToRoute('dashboard');
-        }
-
         $code = $request->query->get('code');
 
         if ($code === null) {
             $error = $request->query->get('error', 'onbekend');
             $this->addFlash('error', 'Saxo login mislukt: ' . $error);
+
+            return $this->redirectToRoute('dashboard');
+        }
+
+        // Skip state validation if session was lost (e.g. after deploy)
+        $state = $request->query->get('state', '');
+        $expectedState = $request->getSession()->get('saxo_state', '');
+        $request->getSession()->remove('saxo_state');
+
+        if ($expectedState !== '' && $state !== $expectedState) {
+            $this->addFlash('error', 'Ongeldige state parameter — mogelijke CSRF-aanval.');
 
             return $this->redirectToRoute('dashboard');
         }

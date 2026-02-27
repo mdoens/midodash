@@ -28,6 +28,7 @@ security:
         - { path: ^/login, roles: PUBLIC_ACCESS }
         - { path: ^/health, roles: PUBLIC_ACCESS }
         - { path: ^/mcp, roles: PUBLIC_ACCESS }
+        - { path: ^/saxo/callback, roles: PUBLIC_ACCESS }
         - { path: ^/, roles: ROLE_ADMIN }
 
 when@test:
