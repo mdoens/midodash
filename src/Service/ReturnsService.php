@@ -75,9 +75,11 @@ class ReturnsService
             $hasTransactions = $totalBought > 0 || $totalSold > 0;
 
             if ($hasTransactions) {
-                $realizedPl = $totalSold - $totalBought;
-                $unrealizedPl = $currentValue > 0 ? $currentValue - $totalBought + $totalSold : 0.0;
-                $costBasis = $totalBought - $totalSold;
+                $netInvested = $totalBought - $totalSold;
+                $unrealizedPl = $currentValue > 0 ? $currentValue - $netInvested : 0.0;
+                // Realized P/L only for fully closed positions (no current value left)
+                $realizedPl = $currentValue === 0.0 && $totalSold > 0 ? $totalSold - $totalBought : 0.0;
+                $costBasis = $netInvested;
             } else {
                 // No transactions: use live allocation data (value - pl = cost basis)
                 $realizedPl = 0.0;
