@@ -240,36 +240,36 @@ class TransactionImportService
             $tx->setPlatform('saxo');
             $tx->setExternalId($externalId);
 
-            $dateStr = (string) ($trade['ExecutionTime'] ?? $trade['TradeTime'] ?? $trade['OrderTime'] ?? '');
+            $dateStr = (string) ($trade['TradeExecutionTime'] ?? $trade['ExecutionTime'] ?? $trade['TradeDate'] ?? '');
             $tx->setTradedAt($dateStr !== '' ? new \DateTime($dateStr) : new \DateTime());
 
-            /** @var array<string, string> $displayFormat */
-            $displayFormat = $trade['DisplayAndFormat'] ?? [];
-            $symbol = (string) ($displayFormat['Symbol'] ?? $trade['Symbol'] ?? ($trade['Uic'] ?? ''));
-            $tx->setSymbol($symbol);
-            $tx->setPositionName($this->symbolMap[$symbol] ?? (string) ($displayFormat['Description'] ?? $trade['InstrumentDescription'] ?? ''));
+            $symbol = (string) ($trade['InstrumentSymbol'] ?? $trade['Symbol'] ?? ($trade['Uic'] ?? ''));
+            // Strip exchange suffix for symbol_map lookup (e.g. "IBGS:xams" → "IBGS")
+            $baseSymbol = str_contains($symbol, ':') ? explode(':', $symbol)[0] : $symbol;
+            $tx->setSymbol($baseSymbol);
+            $tx->setPositionName($this->symbolMap[$baseSymbol] ?? $this->symbolMap[$symbol] ?? (string) ($trade['InstrumentDescription'] ?? ''));
 
             $buySell = strtolower((string) ($trade['BuySell'] ?? $trade['Direction'] ?? ''));
             $tx->setType(str_contains($buySell, 'buy') ? 'buy' : 'sell');
 
-            $qty = abs((float) ($trade['Amount'] ?? $trade['ExecutedAmount'] ?? 0));
-            $price = (float) ($trade['Price'] ?? $trade['FilledPrice'] ?? $trade['ExecutionPrice'] ?? 0);
+            $qty = abs((float) ($trade['Amount'] ?? 0));
+            $price = (float) ($trade['Price'] ?? 0);
             $tx->setQuantity((string) $qty);
             $tx->setPrice((string) $price);
 
-            $amount = $qty * $price;
-            $tx->setAmount((string) $amount);
+            $tradedValue = abs((float) ($trade['TradedValue'] ?? ($qty * $price)));
+            $tx->setAmount((string) $tradedValue);
 
-            $currency = (string) ($displayFormat['Currency'] ?? $trade['TradeCurrency'] ?? 'EUR');
+            $currency = (string) ($trade['AccountCurrency'] ?? $trade['ClientCurrency'] ?? 'EUR');
             $tx->setCurrency($currency);
 
-            // FX conversion: Saxo provides BookedAmountInBaseCurrency for EUR-denominated total
-            $amountEur = (float) ($trade['BookedAmountInBaseCurrency'] ?? $amount);
-            $fxRate = $amount > 0 ? $amountEur / $amount : 1.0;
+            // FX conversion: Saxo provides BookedAmountClientCurrency for account-currency total
+            $amountEur = abs((float) ($trade['BookedAmountClientCurrency'] ?? $trade['BookedAmountAccountCurrency'] ?? $tradedValue));
+            $fxRate = $tradedValue > 0 ? $amountEur / $tradedValue : 1.0;
             $tx->setFxRate((string) $fxRate);
             $tx->setAmountEur((string) $amountEur);
 
-            $tx->setCommission((string) ($trade['Commission'] ?? $trade['CostBuy'] ?? $trade['CostSell'] ?? 0));
+            $tx->setCommission((string) abs((float) ($trade['SpreadCostClientCurrency'] ?? $trade['SpreadCostAccountCurrency'] ?? $trade['Commission'] ?? 0)));
 
             $this->em->persist($tx);
             $imported++;

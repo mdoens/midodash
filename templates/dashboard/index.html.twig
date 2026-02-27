@@ -707,9 +707,15 @@
         {% endif %}
 
         {# ── Transactieoverzicht per maand ── #}
-        {% if monthly_overview|default([])|length > 0 %}
+        {% if monthly_overview.combined|default([])|length > 0 %}
         <div class="glass mt-16">
             <div class="section-label"><span class="section-label__text">Transacties per Maand</span></div>
+            <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                <button class="btn btn--sm btn--active" onclick="showTxTab('tx-combined', this)">Totaal</button>
+                <button class="btn btn--sm" onclick="showTxTab('tx-ib', this)">IBKR{% if monthly_overview.ib|length > 0 %} ({{ monthly_overview.ib|length }}){% endif %}</button>
+                <button class="btn btn--sm" onclick="showTxTab('tx-saxo', this)">Saxo{% if monthly_overview.saxo|length > 0 %} ({{ monthly_overview.saxo|length }}){% endif %}</button>
+            </div>
+            {% macro txTable(rows) %}
             <div style="overflow-x: auto;">
                 <table>
                     <thead>
@@ -724,7 +730,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for row in monthly_overview %}
+                        {% for row in rows %}
                         <tr>
                             <td>{{ row.month }}</td>
                             <td style="text-align: right;" class="mono">{{ row.deposits > 0 ? _self.fmtEur(row.deposits) : '-' }}</td>
@@ -735,10 +741,25 @@
                             <td style="text-align: right;" class="mono">{{ row.interest > 0 ? _self.fmtEur(row.interest) : '-' }}</td>
                         </tr>
                         {% endfor %}
+                        {% if rows|length == 0 %}
+                        <tr><td colspan="7" class="text-muted" style="text-align: center;">Geen transacties</td></tr>
+                        {% endif %}
                     </tbody>
                 </table>
             </div>
+            {% endmacro %}
+            <div id="tx-combined">{{ _self.txTable(monthly_overview.combined) }}</div>
+            <div id="tx-ib" style="display: none;">{{ _self.txTable(monthly_overview.ib) }}</div>
+            <div id="tx-saxo" style="display: none;">{{ _self.txTable(monthly_overview.saxo) }}</div>
         </div>
+        <script>
+        function showTxTab(id, btn) {
+            document.querySelectorAll('[id^="tx-"]').forEach(function(el) { el.style.display = 'none'; });
+            document.getElementById(id).style.display = '';
+            btn.parentElement.querySelectorAll('.btn').forEach(function(b) { b.classList.remove('btn--active'); });
+            btn.classList.add('btn--active');
+        }
+        </script>
         {% endif %}
 
         {# ── Portfolio waarde chart (als er snapshots zijn) ── #}

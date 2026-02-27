@@ -113,7 +113,7 @@ class TransactionRepository extends ServiceEntityRepository
     }
 
     /**
-     * @return list<array{month: string, deposits: float, buys: float, sells: float, dividends: float, commissions: float, interest: float}>
+     * @return array{combined: list<array{month: string, deposits: float, buys: float, sells: float, dividends: float, commissions: float, interest: float}>, ib: list<array{month: string, deposits: float, buys: float, sells: float, dividends: float, commissions: float, interest: float}>, saxo: list<array{month: string, deposits: float, buys: float, sells: float, dividends: float, commissions: float, interest: float}>}
      */
     public function getMonthlyOverview(): array
     {
@@ -123,6 +123,7 @@ class TransactionRepository extends ServiceEntityRepository
         /** @var list<array<string, string>> $rows */
         $rows = $conn->executeQuery(
             "SELECT
+                platform,
                 SUBSTR(traded_at, 1, 7) AS month,
                 SUM(CASE WHEN type = 'deposit' THEN COALESCE(amount_eur, amount) ELSE 0 END) AS deposits,
                 SUM(CASE WHEN type = 'buy' THEN ABS(COALESCE(amount_eur, amount)) ELSE 0 END) AS buys,
@@ -131,14 +132,18 @@ class TransactionRepository extends ServiceEntityRepository
                 SUM(ABS(commission)) AS commissions,
                 SUM(CASE WHEN type = 'interest' THEN COALESCE(amount_eur, amount) ELSE 0 END) AS interest
             FROM {$table}
-            GROUP BY SUBSTR(traded_at, 1, 7)
-            ORDER BY month DESC"
+            GROUP BY platform, SUBSTR(traded_at, 1, 7)
+            ORDER BY month DESC, platform ASC"
         )->fetchAllAssociative();
 
-        $result = [];
+        $combined = [];
+        $byPlatform = ['ib' => [], 'saxo' => []];
+
         foreach ($rows as $row) {
-            $result[] = [
-                'month' => $row['month'],
+            $month = $row['month'];
+            $platform = $row['platform'];
+            $entry = [
+                'month' => $month,
                 'deposits' => (float) $row['deposits'],
                 'buys' => (float) $row['buys'],
                 'sells' => (float) $row['sells'],
@@ -146,9 +151,30 @@ class TransactionRepository extends ServiceEntityRepository
                 'commissions' => (float) $row['commissions'],
                 'interest' => (float) $row['interest'],
             ];
+
+            // Per-platform
+            if (isset($byPlatform[$platform])) {
+                $byPlatform[$platform][] = $entry;
+            }
+
+            // Combined: merge into same month
+            if (!isset($combined[$month])) {
+                $combined[$month] = $entry;
+            } else {
+                $combined[$month]['deposits'] += $entry['deposits'];
+                $combined[$month]['buys'] += $entry['buys'];
+                $combined[$month]['sells'] += $entry['sells'];
+                $combined[$month]['dividends'] += $entry['dividends'];
+                $combined[$month]['commissions'] += $entry['commissions'];
+                $combined[$month]['interest'] += $entry['interest'];
+            }
         }
 
-        return $result;
+        return [
+            'combined' => array_values($combined),
+            'ib' => $byPlatform['ib'],
+            'saxo' => $byPlatform['saxo'],
+        ];
     }
 
     public function existsByPlatformAndExternalId(string $platform, string $externalId): bool

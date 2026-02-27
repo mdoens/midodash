@@ -115,7 +115,7 @@ class ReturnsService
     }
 
     /**
-     * @return list<array{month: string, deposits: float, buys: float, sells: float, dividends: float, commissions: float, interest: float}>
+     * @return array{combined: list<array{month: string, deposits: float, buys: float, sells: float, dividends: float, commissions: float, interest: float}>, ib: list<array{month: string, deposits: float, buys: float, sells: float, dividends: float, commissions: float, interest: float}>, saxo: list<array{month: string, deposits: float, buys: float, sells: float, dividends: float, commissions: float, interest: float}>}
      */
     public function getMonthlyOverview(): array
     {
