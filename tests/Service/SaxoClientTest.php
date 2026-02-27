@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service;
 
+use App\Service\DataBufferService;
 use App\Service\SaxoClient;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -16,9 +17,11 @@ class SaxoClientTest extends TestCase
     protected function setUp(): void
     {
         $httpClient = $this->createMock(HttpClientInterface::class);
+        $dataBuffer = $this->createMock(DataBufferService::class);
         $this->client = new SaxoClient(
             $httpClient,
             new NullLogger(),
+            $dataBuffer,
             'test_key',
             'test_secret',
             'https://example.com/callback',

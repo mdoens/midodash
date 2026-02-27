@@ -7,6 +7,7 @@ namespace App\Controller;
 use App\Service\CalculationService;
 use App\Service\CrisisService;
 use App\Service\DashboardCacheService;
+use App\Service\DataBufferService;
 use App\Service\DxyService;
 use App\Service\EurostatService;
 use App\Service\FredApiService;
@@ -14,6 +15,7 @@ use App\Service\GoldPriceService;
 use App\Service\IbClient;
 use App\Service\MomentumService;
 use App\Service\PortfolioService;
+use App\Service\PortfolioSnapshotService;
 use App\Service\SaxoClient;
 use App\Service\TriggerService;
 use Psr\Log\LoggerInterface;
@@ -39,6 +41,8 @@ class DashboardController extends AbstractController
         DxyService $dxyService,
         TriggerService $triggerService,
         DashboardCacheService $dashboardCache,
+        DataBufferService $dataBuffer,
+        PortfolioSnapshotService $snapshotService,
         ChartBuilderInterface $chartBuilder,
         LoggerInterface $logger,
     ): Response {
@@ -70,7 +74,16 @@ class DashboardController extends AbstractController
             $goldPrice,
             $dxyService,
             $triggerService,
+            $dataBuffer,
             $logger,
+        );
+
+        // Save daily portfolio snapshot (once per day)
+        $snapshotService->saveSnapshot(
+            $data['allocation'],
+            $data['regime'],
+            !($data['saxo_from_buffer'] ?? false),
+            !($data['ib_from_buffer'] ?? false),
         );
 
         // Save to cache (without Chart objects)
@@ -99,10 +112,13 @@ class DashboardController extends AbstractController
         GoldPriceService $goldPrice,
         DxyService $dxyService,
         TriggerService $triggerService,
+        DataBufferService $dataBuffer,
         LoggerInterface $logger,
     ): array {
         // ── IB data ──
         $ibError = false;
+        $ibFromBuffer = false;
+        $ibBufferedAt = null;
         try {
             $ibPositions = $ibClient->getPositions();
             $ibCash = $ibClient->getCashReport();
@@ -112,10 +128,29 @@ class DashboardController extends AbstractController
             $ibCash = [];
             $ibError = true;
         }
+
+        // IB fallback to buffer
+        if ($ibPositions === [] && $ibError) {
+            $buffered = $dataBuffer->retrieve('ib', 'positions');
+            if ($buffered !== null) {
+                $ibPositions = $buffered['data'];
+                $ibFromBuffer = true;
+                $ibBufferedAt = $buffered['fetched_at'];
+                $logger->info('IB using buffered positions', ['buffered_at' => $ibBufferedAt->format('Y-m-d H:i')]);
+            }
+
+            $cashBuffered = $dataBuffer->retrieve('ib', 'cash_report');
+            if ($cashBuffered !== null && $ibCash === []) {
+                $ibCash = $cashBuffered['data'];
+            }
+        }
+
         $ibCashBalance = (float) ($ibCash['ending_cash'] ?? 0);
 
         // ── Saxo data ──
         $saxoError = false;
+        $saxoFromBuffer = false;
+        $saxoBufferedAt = null;
         $saxoPositions = null;
         $saxoCashBalance = 0.0;
         $saxoAuthenticated = false;
@@ -148,6 +183,22 @@ class DashboardController extends AbstractController
         } catch (\Throwable $e) {
             $logger->error('Dashboard: Saxo data failed', ['error' => $e->getMessage()]);
             $saxoError = true;
+        }
+
+        // Saxo fallback to buffer when positions are null (token expired, API down, etc.)
+        if ($saxoPositions === null) {
+            $buffered = $dataBuffer->retrieve('saxo', 'positions');
+            if ($buffered !== null) {
+                $saxoPositions = $buffered['data'];
+                $saxoFromBuffer = true;
+                $saxoBufferedAt = $buffered['fetched_at'];
+                $logger->info('Saxo using buffered positions', ['buffered_at' => $saxoBufferedAt->format('Y-m-d H:i')]);
+            }
+
+            $balanceBuffered = $dataBuffer->retrieve('saxo', 'balance');
+            if ($balanceBuffered !== null && $saxoCashBalance === 0.0) {
+                $saxoCashBalance = (float) ($balanceBuffered['data']['CashBalance'] ?? 0);
+            }
         }
 
         // Log raw IB symbols for debugging
@@ -237,6 +288,10 @@ class DashboardController extends AbstractController
             'saxo_error' => $saxoError,
             'momentum_error' => $momentumError,
             'macro_error' => $macroError,
+            'saxo_from_buffer' => $saxoFromBuffer,
+            'saxo_buffered_at' => $saxoBufferedAt,
+            'ib_from_buffer' => $ibFromBuffer,
+            'ib_buffered_at' => $ibBufferedAt,
         ];
     }
 
@@ -287,7 +342,7 @@ class DashboardController extends AbstractController
     }
 
     /**
-     * @param array<string, array<string, mixed>> $assetClasses
+     * @param array<string, mixed> $allocation
      */
     private function buildAssetClassPieChart(ChartBuilderInterface $chartBuilder, array $allocation): Chart
     {

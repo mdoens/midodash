@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service;
 
+use App\Service\DataBufferService;
 use App\Service\IbClient;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -16,9 +17,11 @@ class IbClientTest extends TestCase
     protected function setUp(): void
     {
         $httpClient = $this->createMock(HttpClientInterface::class);
+        $dataBuffer = $this->createMock(DataBufferService::class);
         $this->client = new IbClient(
             $httpClient,
             new NullLogger(),
+            $dataBuffer,
             'test_token',
             'test_query',
             sys_get_temp_dir(),

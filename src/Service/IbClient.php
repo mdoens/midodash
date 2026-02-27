@@ -14,6 +14,7 @@ class IbClient
     public function __construct(
         private readonly HttpClientInterface $httpClient,
         private readonly LoggerInterface $logger,
+        private readonly DataBufferService $dataBuffer,
         private readonly string $ibToken,
         private readonly string $ibQueryId,
         private readonly string $projectDir,
@@ -97,7 +98,13 @@ class IbClient
             return [];
         }
 
-        return $this->parsePositions($content);
+        $positions = $this->parsePositions($content);
+
+        if ($positions !== []) {
+            $this->dataBuffer->store('ib', 'positions', $positions);
+        }
+
+        return $positions;
     }
 
     /**
@@ -128,11 +135,15 @@ class IbClient
             return [];
         }
 
-        return [
+        $report = [
             'deposits' => (float) $cash['deposits'],
             'commissions' => (float) $cash['commissions'],
             'ending_cash' => (float) $cash['endingCash'],
         ];
+
+        $this->dataBuffer->store('ib', 'cash_report', $report);
+
+        return $report;
     }
 
     public function getCacheFile(): string

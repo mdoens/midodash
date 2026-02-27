@@ -39,9 +39,24 @@
 
 {% block body %}
 {# ── Alerts ── #}
-{% if ib_error %}<div class="alert alert--warning">Interactive Brokers data is momenteel niet beschikbaar.</div>{% endif %}
-{% if saxo_error %}<div class="alert alert--warning">Saxo Bank data kon niet worden opgehaald.</div>{% endif %}
+{% if ib_error and not ib_from_buffer|default(false) %}<div class="alert alert--warning">Interactive Brokers data is momenteel niet beschikbaar.</div>{% endif %}
+{% if saxo_error and not saxo_from_buffer|default(false) %}<div class="alert alert--warning">Saxo Bank data kon niet worden opgehaald.</div>{% endif %}
 {% if macro_error %}<div class="alert alert--warning">Macro indicatoren konden niet worden geladen.</div>{% endif %}
+
+{# ── Buffered data banners ── #}
+{% if saxo_from_buffer|default(false) %}
+<div class="alert alert--buffered">
+    <span class="dot dot--yellow"></span>
+    Saxo data van {{ saxo_buffered_at|date("d M Y H:i") }} (gebufferd)
+    {% if not saxo_authenticated %} — <a href="{{ path('saxo_login') }}">Token vernieuwen</a>{% endif %}
+</div>
+{% endif %}
+{% if ib_from_buffer|default(false) %}
+<div class="alert alert--buffered">
+    <span class="dot dot--yellow"></span>
+    IB data van {{ ib_buffered_at|date("d M Y H:i") }} (gebufferd)
+</div>
+{% endif %}
 
 {# ── Set crisis signal colors ── #}
 {% set dd = crisis.drawdown.drawdown_pct ?? 0 %}

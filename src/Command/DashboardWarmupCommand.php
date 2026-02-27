@@ -8,6 +8,7 @@ use App\Controller\DashboardController;
 use App\Service\CalculationService;
 use App\Service\CrisisService;
 use App\Service\DashboardCacheService;
+use App\Service\DataBufferService;
 use App\Service\DxyService;
 use App\Service\EurostatService;
 use App\Service\FredApiService;
@@ -15,6 +16,7 @@ use App\Service\GoldPriceService;
 use App\Service\IbClient;
 use App\Service\MomentumService;
 use App\Service\PortfolioService;
+use App\Service\PortfolioSnapshotService;
 use App\Service\SaxoClient;
 use App\Service\TriggerService;
 use Psr\Log\LoggerInterface;
@@ -43,6 +45,8 @@ class DashboardWarmupCommand extends Command
         private readonly GoldPriceService $goldPrice,
         private readonly DxyService $dxyService,
         private readonly TriggerService $triggerService,
+        private readonly DataBufferService $dataBuffer,
+        private readonly PortfolioSnapshotService $snapshotService,
         private readonly LoggerInterface $logger,
     ) {
         parent::__construct();
@@ -66,7 +70,20 @@ class DashboardWarmupCommand extends Command
                 $this->goldPrice,
                 $this->dxyService,
                 $this->triggerService,
+                $this->dataBuffer,
                 $this->logger,
+            );
+
+            // Save daily portfolio snapshot
+            /** @var array<string, mixed> $allocation */
+            $allocation = $data['allocation'];
+            /** @var string $regime */
+            $regime = $data['regime'];
+            $this->snapshotService->saveSnapshot(
+                $allocation,
+                $regime,
+                !($data['saxo_from_buffer'] ?? false),
+                !($data['ib_from_buffer'] ?? false),
             );
 
             $this->dashboardCache->save($data);
@@ -75,14 +92,18 @@ class DashboardWarmupCommand extends Command
 
             // Log position details for debugging
             $posDetails = [];
-            foreach ($data['allocation']['positions'] ?? [] as $name => $p) {
+            /** @var array<string, array{value: float, status: string}> $positions */
+            $positions = $allocation['positions'] ?? [];
+            foreach ($positions as $name => $p) {
                 $posDetails[] = sprintf('%s: €%s (%s)', $name, number_format($p['value'], 0, ',', '.'), $p['status']);
             }
+            /** @var float $totalPortfolio */
+            $totalPortfolio = $allocation['total_portfolio'] ?? 0;
             $output->writeln(sprintf(
                 '<info>Dashboard cache warmed in %ss. Portfolio: €%s, Positions: %d</info>',
                 $elapsed,
-                number_format($data['allocation']['total_portfolio'] ?? 0, 0, ',', '.'),
-                count($data['allocation']['positions'] ?? []),
+                number_format($totalPortfolio, 0, ',', '.'),
+                count($positions),
             ));
             $output->writeln('Positions: ' . implode(' | ', $posDetails));
             $output->writeln(sprintf('Saxo authenticated: %s', $data['saxo_authenticated'] ? 'YES' : 'NO'));

@@ -7,6 +7,10 @@ printenv | grep -vE '^(HOME|PATH|SHELL|USER|LOGNAME|_)=' > /etc/environment
 # Start cron in background
 cron
 
+# Run database migrations
+echo "Running database migrations..."
+php /var/www/html/bin/console app:db:migrate || true
+
 # Refresh Saxo token first (may have expired during deploy)
 echo "Refreshing Saxo token..."
 php /var/www/html/bin/console app:saxo:refresh || true

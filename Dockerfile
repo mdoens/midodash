@@ -2,9 +2,9 @@ FROM php:8.4-apache
 
 RUN a2enmod rewrite
 
-# PHP extensions + cron
-RUN apt-get update && apt-get install -y libzip-dev unzip cron && \
-    docker-php-ext-install zip opcache && \
+# PHP extensions + cron + MySQL client
+RUN apt-get update && apt-get install -y libzip-dev unzip cron default-mysql-client && \
+    docker-php-ext-install zip opcache pdo pdo_mysql && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
@@ -25,6 +25,7 @@ RUN APP_ENV=prod APP_SECRET=build \
     SAXO_APP_KEY=x SAXO_APP_SECRET=x SAXO_REDIRECT_URI=x \
     SAXO_AUTH_ENDPOINT=x SAXO_TOKEN_ENDPOINT=x SAXO_API_BASE=x \
     DASHBOARD_PASSWORD_HASH=x FRED_API_KEY=x \
+    DATABASE_URL="sqlite:///var/www/html/var/data/mido.sqlite" \
     php bin/console importmap:install --env=prod
 
 # Compile assets to public/assets/ (required for prod)
@@ -33,6 +34,7 @@ RUN APP_ENV=prod APP_SECRET=build \
     SAXO_APP_KEY=x SAXO_APP_SECRET=x SAXO_REDIRECT_URI=x \
     SAXO_AUTH_ENDPOINT=x SAXO_TOKEN_ENDPOINT=x SAXO_API_BASE=x \
     DASHBOARD_PASSWORD_HASH=x FRED_API_KEY=x \
+    DATABASE_URL="sqlite:///var/www/html/var/data/mido.sqlite" \
     php bin/console asset-map:compile --env=prod
 
 # Warmup Symfony cache
@@ -41,6 +43,7 @@ RUN APP_ENV=prod APP_SECRET=build \
     SAXO_APP_KEY=x SAXO_APP_SECRET=x SAXO_REDIRECT_URI=x \
     SAXO_AUTH_ENDPOINT=x SAXO_TOKEN_ENDPOINT=x SAXO_API_BASE=x \
     DASHBOARD_PASSWORD_HASH=x FRED_API_KEY=x \
+    DATABASE_URL="sqlite:///var/www/html/var/data/mido.sqlite" \
     php bin/console cache:warmup --env=prod
 
 # Apache: DocumentRoot to public/
@@ -48,7 +51,7 @@ RUN sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available
 RUN printf '<Directory /var/www/html/public>\n    AllowOverride All\n    Require all granted\n</Directory>\n' >> /etc/apache2/apache2.conf
 
 # Writable dirs
-RUN mkdir -p var/cache var/log var/share && chown -R www-data:www-data var/
+RUN mkdir -p var/cache var/log var/share var/data && chown -R www-data:www-data var/
 
 ENV APP_ENV=prod
 ENV APP_DEBUG=0

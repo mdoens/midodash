@@ -17,6 +17,7 @@ class SaxoClient
     public function __construct(
         private readonly HttpClientInterface $httpClient,
         private readonly LoggerInterface $logger,
+        private readonly DataBufferService $dataBuffer,
         private readonly string $saxoAppKey,
         private readonly string $saxoAppSecret,
         private readonly string $saxoRedirectUri,
@@ -152,6 +153,7 @@ class SaxoClient
 
             $positions = $this->parsePositions($response->toArray(false));
             $this->updateCache('positions', $positions);
+            $this->dataBuffer->store('saxo', 'positions', $positions);
             $this->logger->info('Saxo positions fetched', ['count' => count($positions)]);
 
             return $positions;
@@ -184,6 +186,7 @@ class SaxoClient
 
             $balance = $response->toArray(false);
             $this->updateCache('balance', $balance);
+            $this->dataBuffer->store('saxo', 'balance', $balance);
 
             return $balance;
         } catch (\Throwable $e) {
