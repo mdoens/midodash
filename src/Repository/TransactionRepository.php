@@ -122,7 +122,8 @@ class TransactionRepository extends ServiceEntityRepository
         // Use SUBSTR for SQLite compatibility (works on MySQL too)
         /** @var list<array<string, string>> $rows */
         $rows = $conn->executeQuery(
-            "SELECT
+            <<<'SQL'
+            SELECT
                 SUBSTR(traded_at, 1, 7) AS month,
                 SUM(CASE WHEN type = 'deposit' THEN COALESCE(amount_eur, amount) ELSE 0 END) AS deposits,
                 SUM(CASE WHEN type = 'buy' THEN ABS(COALESCE(amount_eur, amount)) ELSE 0 END) AS buys,
@@ -130,9 +131,10 @@ class TransactionRepository extends ServiceEntityRepository
                 SUM(CASE WHEN type = 'dividend' THEN COALESCE(amount_eur, amount) ELSE 0 END) AS dividends,
                 SUM(ABS(commission)) AS commissions,
                 SUM(CASE WHEN type = 'interest' THEN COALESCE(amount_eur, amount) ELSE 0 END) AS interest
-            FROM transaction
+            FROM "transaction"
             GROUP BY SUBSTR(traded_at, 1, 7)
-            ORDER BY month DESC"
+            ORDER BY month DESC
+            SQL
         )->fetchAllAssociative();
 
         $result = [];

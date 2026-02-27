@@ -136,6 +136,8 @@ class TransactionImportService
                 $tx->setType('tax');
             } elseif (str_contains($ibType, 'commission')) {
                 $tx->setType('fee');
+            } elseif (str_contains($ibType, 'interest')) {
+                $tx->setType('interest');
             } elseif (str_contains($ibType, 'deposit')) {
                 $tx->setType('deposit');
             } elseif (str_contains($ibType, 'withdrawal')) {
@@ -178,7 +180,7 @@ class TransactionImportService
 
         foreach ($this->symbolMap as $symbol => $name) {
             $count = $conn->executeStatement(
-                'UPDATE transaction SET position_name = :name WHERE symbol = :symbol AND position_name != :name',
+                'UPDATE "transaction" SET position_name = :name WHERE symbol = :symbol AND position_name != :name',
                 ['name' => $name, 'symbol' => $symbol],
             );
             $updated += $count;

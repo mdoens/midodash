@@ -9,7 +9,7 @@ use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: TransactionRepository::class)]
-#[ORM\Table(name: 'transaction')]
+#[ORM\Table(name: '`transaction`')]
 #[ORM\UniqueConstraint(columns: ['platform', 'external_id'])]
 #[ORM\Index(columns: ['traded_at'])]
 class Transaction
