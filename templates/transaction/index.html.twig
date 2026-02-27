@@ -1,0 +1,125 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Transacties — MIDO Command Center{% endblock %}
+
+{% block body %}
+<div class="container">
+    <h1 class="dashboard-title" style="font-size: 28px; font-weight: 800; letter-spacing: -0.5px; background: linear-gradient(135deg, #e2e8f0, #94a3b8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 8px;">Transacties</h1>
+    <p style="color: #64748b; margin-bottom: 20px;">
+        <a href="{{ path('dashboard') }}" style="color: #3b82f6; text-decoration: none;">&larr; Dashboard</a>
+    </p>
+
+    {# Filters #}
+    <div class="glass mb-16" style="margin-bottom: 16px;">
+        <form method="get" action="{{ path('transactions') }}" style="display: flex; gap: 12px; flex-wrap: wrap; align-items: end;">
+            <div>
+                <label style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;">Platform</label>
+                <select name="platform" style="background: rgba(30,41,59,0.8); color: #e2e8f0; border: 1px solid rgba(148,163,184,0.2); border-radius: 6px; padding: 6px 10px; font-size: 13px;">
+                    <option value="">Alle</option>
+                    <option value="ib" {{ filters.platform == 'ib' ? 'selected' }}>IB</option>
+                    <option value="saxo" {{ filters.platform == 'saxo' ? 'selected' }}>Saxo</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;">Type</label>
+                <select name="type" style="background: rgba(30,41,59,0.8); color: #e2e8f0; border: 1px solid rgba(148,163,184,0.2); border-radius: 6px; padding: 6px 10px; font-size: 13px;">
+                    <option value="">Alle</option>
+                    <option value="buy" {{ filters.type == 'buy' ? 'selected' }}>Koop</option>
+                    <option value="sell" {{ filters.type == 'sell' ? 'selected' }}>Verkoop</option>
+                    <option value="dividend" {{ filters.type == 'dividend' ? 'selected' }}>Dividend</option>
+                    <option value="deposit" {{ filters.type == 'deposit' ? 'selected' }}>Storting</option>
+                    <option value="withdrawal" {{ filters.type == 'withdrawal' ? 'selected' }}>Opname</option>
+                    <option value="fee" {{ filters.type == 'fee' ? 'selected' }}>Kosten</option>
+                    <option value="tax" {{ filters.type == 'tax' ? 'selected' }}>Belasting</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;">Van</label>
+                <input type="date" name="from" value="{{ filters.from }}" style="background: rgba(30,41,59,0.8); color: #e2e8f0; border: 1px solid rgba(148,163,184,0.2); border-radius: 6px; padding: 6px 10px; font-size: 13px;">
+            </div>
+            <div>
+                <label style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;">Tot</label>
+                <input type="date" name="to" value="{{ filters.to }}" style="background: rgba(30,41,59,0.8); color: #e2e8f0; border: 1px solid rgba(148,163,184,0.2); border-radius: 6px; padding: 6px 10px; font-size: 13px;">
+            </div>
+            <button type="submit" style="background: #3b82f6; color: white; border: none; border-radius: 6px; padding: 7px 16px; font-size: 13px; cursor: pointer;">Filteren</button>
+        </form>
+    </div>
+
+    {# Summary #}
+    <div class="grid grid--5" style="margin-bottom: 16px;">
+        <div class="stat">
+            <div class="stat__label">Gekocht</div>
+            <div class="stat__value" style="font-family: 'JetBrains Mono', monospace;">&euro;{{ summary.total_buy|number_format(0, ',', '.') }}</div>
+        </div>
+        <div class="stat">
+            <div class="stat__label">Verkocht</div>
+            <div class="stat__value" style="font-family: 'JetBrains Mono', monospace;">&euro;{{ summary.total_sell|number_format(0, ',', '.') }}</div>
+        </div>
+        <div class="stat">
+            <div class="stat__label">Dividend</div>
+            <div class="stat__value" style="font-family: 'JetBrains Mono', monospace; color: var(--green);">&euro;{{ summary.total_dividend|number_format(0, ',', '.') }}</div>
+        </div>
+        <div class="stat">
+            <div class="stat__label">Commissie</div>
+            <div class="stat__value" style="font-family: 'JetBrains Mono', monospace; color: var(--red);">&euro;{{ summary.total_commission|number_format(2, ',', '.') }}</div>
+        </div>
+        <div class="stat">
+            <div class="stat__label">Netto</div>
+            <div class="stat__value" style="font-family: 'JetBrains Mono', monospace; color: {{ summary.net >= 0 ? 'var(--green)' : 'var(--red)' }};">&euro;{{ summary.net|number_format(0, ',', '.') }}</div>
+        </div>
+    </div>
+
+    {# Transaction Table #}
+    <div class="glass">
+        {% if transactions|length > 0 %}
+        <div style="overflow-x: auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="text-align: left;">Datum</th>
+                        <th style="text-align: left;">Platform</th>
+                        <th style="text-align: left;">Symbool</th>
+                        <th style="text-align: left;">Type</th>
+                        <th style="text-align: right;">Aantal</th>
+                        <th style="text-align: right;">Prijs</th>
+                        <th style="text-align: right;">Bedrag EUR</th>
+                        <th style="text-align: right;">Commissie</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tx in transactions %}
+                    <tr>
+                        <td style="font-family: 'JetBrains Mono', monospace;">{{ tx.tradedAt|date('Y-m-d') }}</td>
+                        <td><span class="badge badge--{{ tx.platform == 'ib' ? 'blue' : 'purple' }}">{{ tx.platform|upper }}</span></td>
+                        <td style="font-weight: 600;">{{ tx.symbol }}</td>
+                        <td>
+                            {% if tx.type == 'buy' %}<span class="badge badge--green">KOOP</span>
+                            {% elseif tx.type == 'sell' %}<span class="badge badge--red">VERKOOP</span>
+                            {% elseif tx.type == 'dividend' %}<span class="badge badge--green">DIVIDEND</span>
+                            {% elseif tx.type == 'deposit' %}<span class="badge badge--blue">STORTING</span>
+                            {% elseif tx.type == 'withdrawal' %}<span class="badge badge--yellow">OPNAME</span>
+                            {% elseif tx.type == 'fee' %}<span class="badge badge--red">KOSTEN</span>
+                            {% elseif tx.type == 'tax' %}<span class="badge badge--red">BELASTING</span>
+                            {% else %}<span class="badge">{{ tx.type|upper }}</span>
+                            {% endif %}
+                        </td>
+                        <td style="text-align: right; font-family: 'JetBrains Mono', monospace;">{{ tx.quantity != '0' ? tx.quantity|number_format(2) : '' }}</td>
+                        <td style="text-align: right; font-family: 'JetBrains Mono', monospace;">{{ tx.price != '0' ? ('&euro;' ~ tx.price|number_format(2, ',', '.')) : '' }}</td>
+                        <td style="text-align: right; font-family: 'JetBrains Mono', monospace; color: {{ (tx.amountEur|default('0'))|number_format(2) >= 0 ? 'var(--green)' : 'var(--red)' }};">&euro;{{ (tx.amountEur|default('0'))|number_format(2, ',', '.') }}</td>
+                        <td style="text-align: right; font-family: 'JetBrains Mono', monospace; color: var(--red);">{{ tx.commission != '0' ? ('&euro;' ~ tx.commission|number_format(2, ',', '.')) : '' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div style="margin-top: 12px; font-size: 11px; color: #64748b;">
+            {{ transactions|length }} transacties getoond (max 500)
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 40px; color: #94a3b8;">
+            Geen transacties gevonden. Transacties worden ge&iuml;mporteerd via <code style="background: rgba(30,41,59,0.8); padding: 2px 6px; border-radius: 4px;">app:transactions:import</code>.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

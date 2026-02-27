@@ -99,6 +99,7 @@
         <button class="tab" data-tabs-target="tab" data-tab="crisis" data-action="click->tabs#switch">Crisis</button>
         <button class="tab" data-tabs-target="tab" data-tab="factors" data-action="click->tabs#switch">Factoren</button>
         <button class="tab" data-tabs-target="tab" data-tab="momentum" data-action="click->tabs#switch">Momentum</button>
+        <button class="tab" data-tabs-target="tab" data-tab="history" data-action="click->tabs#switch">Historie</button>
     </div>
 
     {# ── TOP METRICS ROW ── #}
@@ -633,6 +634,77 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    {# ════════════════════════════════════════════════════════════════
+       TAB 6: HISTORIE
+       ════════════════════════════════════════════════════════════════ #}
+    <div class="tab-panel" data-tabs-target="panel" data-panel="history">
+        {% if history|default([])|length > 1 %}
+        <div class="grid grid--2">
+            {# Portfolio Value Chart #}
+            <div class="glass">
+                <div class="section-label"><span class="section-label__text">Portfolio Waarde</span></div>
+                <div class="chart-wrap chart-wrap--h280">
+                    {{ render_chart(history_chart) }}
+                </div>
+            </div>
+
+            {# Asset Allocation Over Time #}
+            <div class="glass">
+                <div class="section-label"><span class="section-label__text">Asset Allocatie</span></div>
+                <div class="chart-wrap chart-wrap--h280">
+                    {{ render_chart(allocation_chart) }}
+                </div>
+            </div>
+        </div>
+
+        {# Monthly Returns Table #}
+        <div class="glass mt-16">
+            <div class="section-label"><span class="section-label__text">Maandelijks Rendement</span></div>
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="text-align: left;">Maand</th>
+                            <th style="text-align: right;">Beginwaarde</th>
+                            <th style="text-align: right;">Eindwaarde</th>
+                            <th style="text-align: right;">Rendement</th>
+                            <th style="text-align: right;">%</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% set monthlyData = {} %}
+                        {% for snap in history|default([]) %}
+                            {% set month = snap.date[:7] %}
+                            {% if monthlyData[month] is not defined %}
+                                {% set monthlyData = monthlyData|merge({(month): {first: snap.total_value, last: snap.total_value}}) %}
+                            {% else %}
+                                {% set monthlyData = monthlyData|merge({(month): {first: monthlyData[month].first, last: snap.total_value}}) %}
+                            {% endif %}
+                        {% endfor %}
+                        {% for month, data in monthlyData|reverse %}
+                            {% set ret = data.last - data.first %}
+                            {% set retPct = data.first > 0 ? ((data.last - data.first) / data.first * 100) : 0 %}
+                            <tr>
+                                <td>{{ month }}</td>
+                                <td style="text-align: right;" class="mono">€{{ data.first|number_format(0, ',', '.') }}</td>
+                                <td style="text-align: right;" class="mono">€{{ data.last|number_format(0, ',', '.') }}</td>
+                                <td style="text-align: right;" class="mono {{ ret >= 0 ? 'text-green' : 'text-red' }}">{{ ret >= 0 ? '+' : '' }}€{{ ret|number_format(0, ',', '.') }}</td>
+                                <td style="text-align: right;" class="mono {{ retPct >= 0 ? 'text-green' : 'text-red' }}">{{ retPct >= 0 ? '+' : '' }}{{ retPct|number_format(1) }}%</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% else %}
+        <div class="glass">
+            <div style="text-align: center; padding: 40px; color: #94a3b8;">
+                Nog geen historische data beschikbaar. Portfolio snapshots worden dagelijks opgeslagen.
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

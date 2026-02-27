@@ -20,6 +20,7 @@ use App\Service\SaxoClient;
 use App\Service\TriggerService;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\UX\Chartjs\Builder\ChartBuilderInterface;
@@ -58,6 +59,14 @@ class DashboardController extends AbstractController
             // Always check live Saxo auth status
             $cached['saxo_authenticated'] = $saxoClient->isAuthenticated();
 
+            // Portfolio history for Historie tab
+            $history = $snapshotService->getHistory(365);
+            $cached['history'] = $history;
+            if (count($history) > 1) {
+                $cached['history_chart'] = $this->buildHistoryChart($chartBuilder, $history);
+                $cached['allocation_chart'] = $this->buildAllocationHistoryChart($chartBuilder, $history);
+            }
+
             return $this->render('dashboard/index.html.twig', $cached);
         }
 
@@ -93,6 +102,14 @@ class DashboardController extends AbstractController
         $data['pie_chart'] = $this->buildAssetClassPieChart($chartBuilder, $data['allocation']);
         $data['radar_chart'] = $this->buildFactorRadarChart($chartBuilder, $portfolioService->getFactorData());
         $data['performance_chart'] = $this->buildPerformanceChart($chartBuilder, $data['allocation']['positions']);
+
+        // Portfolio history for Historie tab
+        $history = $snapshotService->getHistory(365);
+        $data['history'] = $history;
+        if (count($history) > 1) {
+            $data['history_chart'] = $this->buildHistoryChart($chartBuilder, $history);
+            $data['allocation_chart'] = $this->buildAllocationHistoryChart($chartBuilder, $history);
+        }
 
         return $this->render('dashboard/index.html.twig', $data);
     }
@@ -444,6 +461,12 @@ class DashboardController extends AbstractController
         return $chart;
     }
 
+    #[Route('/api/portfolio-history', name: 'api_portfolio_history')]
+    public function portfolioHistory(PortfolioSnapshotService $snapshotService): JsonResponse
+    {
+        return $this->json($snapshotService->getHistory(365));
+    }
+
     /**
      * @param array<string, array<string, mixed>> $positions
      */
@@ -494,6 +517,136 @@ class DashboardController extends AbstractController
                 'tooltip' => [
                     'backgroundColor' => '#0f172a',
                     'callbacks' => ['label' => '@@function(ctx) { return ctx.parsed.x.toFixed(1) + "%"; }@@'],
+                ],
+            ],
+        ]);
+
+        return $chart;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $history
+     */
+    private function buildHistoryChart(ChartBuilderInterface $chartBuilder, array $history): Chart
+    {
+        $chart = $chartBuilder->createChart(Chart::TYPE_LINE);
+
+        $chart->setData([
+            'labels' => array_column($history, 'date'),
+            'datasets' => [
+                [
+                    'label' => 'Portfolio Waarde',
+                    'data' => array_column($history, 'total_value'),
+                    'borderColor' => '#3b82f6',
+                    'backgroundColor' => 'rgba(59, 130, 246, 0.1)',
+                    'fill' => true,
+                    'tension' => 0.3,
+                    'pointRadius' => 0,
+                    'borderWidth' => 2,
+                ],
+            ],
+        ]);
+
+        $chart->setOptions([
+            'responsive' => true,
+            'maintainAspectRatio' => false,
+            'plugins' => [
+                'legend' => ['display' => false],
+                'tooltip' => [
+                    'mode' => 'index',
+                    'intersect' => false,
+                ],
+            ],
+            'scales' => [
+                'x' => [
+                    'grid' => ['color' => 'rgba(148,163,184,0.08)'],
+                    'ticks' => ['color' => '#64748b', 'maxTicksLimit' => 12],
+                ],
+                'y' => [
+                    'grid' => ['color' => 'rgba(148,163,184,0.08)'],
+                    'ticks' => ['color' => '#64748b'],
+                ],
+            ],
+        ]);
+
+        return $chart;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $history
+     */
+    private function buildAllocationHistoryChart(ChartBuilderInterface $chartBuilder, array $history): Chart
+    {
+        $chart = $chartBuilder->createChart(Chart::TYPE_LINE);
+
+        $chart->setData([
+            'labels' => array_column($history, 'date'),
+            'datasets' => [
+                [
+                    'label' => 'Equity',
+                    'data' => array_column($history, 'equity_pct'),
+                    'borderColor' => '#3b82f6',
+                    'backgroundColor' => 'rgba(59, 130, 246, 0.1)',
+                    'fill' => true,
+                    'tension' => 0.3,
+                    'pointRadius' => 0,
+                    'borderWidth' => 2,
+                ],
+                [
+                    'label' => 'Fixed Income',
+                    'data' => array_column($history, 'fi_pct'),
+                    'borderColor' => '#22c55e',
+                    'backgroundColor' => 'rgba(34, 197, 94, 0.1)',
+                    'fill' => true,
+                    'tension' => 0.3,
+                    'pointRadius' => 0,
+                    'borderWidth' => 2,
+                ],
+                [
+                    'label' => 'Alternatives',
+                    'data' => array_column($history, 'alt_pct'),
+                    'borderColor' => '#f59e0b',
+                    'backgroundColor' => 'rgba(245, 158, 11, 0.1)',
+                    'fill' => true,
+                    'tension' => 0.3,
+                    'pointRadius' => 0,
+                    'borderWidth' => 2,
+                ],
+                [
+                    'label' => 'Cash',
+                    'data' => array_column($history, 'cash_pct'),
+                    'borderColor' => '#94a3b8',
+                    'backgroundColor' => 'rgba(148, 163, 184, 0.1)',
+                    'fill' => true,
+                    'tension' => 0.3,
+                    'pointRadius' => 0,
+                    'borderWidth' => 2,
+                ],
+            ],
+        ]);
+
+        $chart->setOptions([
+            'responsive' => true,
+            'maintainAspectRatio' => false,
+            'plugins' => [
+                'legend' => [
+                    'labels' => ['color' => '#94a3b8', 'boxWidth' => 12, 'padding' => 12],
+                ],
+                'tooltip' => [
+                    'mode' => 'index',
+                    'intersect' => false,
+                ],
+            ],
+            'scales' => [
+                'x' => [
+                    'grid' => ['color' => 'rgba(148,163,184,0.08)'],
+                    'ticks' => ['color' => '#64748b', 'maxTicksLimit' => 12],
+                ],
+                'y' => [
+                    'grid' => ['color' => 'rgba(148,163,184,0.08)'],
+                    'ticks' => ['color' => '#64748b'],
+                    'min' => 0,
+                    'max' => 100,
                 ],
             ],
         ]);
