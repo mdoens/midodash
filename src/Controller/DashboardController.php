@@ -236,6 +236,9 @@ class DashboardController extends AbstractController
 
             // Always check live Saxo auth status + open orders + performance
             $cached['saxo_authenticated'] = $saxoClient->isAuthenticated();
+            if ($cached['saxo_authenticated']) {
+                $cached['saxo_from_buffer'] = false;
+            }
             $cached['saxo_open_orders'] = $cached['saxo_authenticated'] ? ($saxoClient->getOpenOrders() ?? []) : [];
             if (!isset($cached['saxo_performance'])) {
                 $cached['saxo_performance'] = null;
