@@ -3,15 +3,21 @@
 ## 2026-02-28
 
 ### Fixed
-- **MCP portfolio Saxo fallback** — buffer fallback zat in catch-block maar getPositions() returnt null zonder exception. Nu als aparte check na try/catch
-- **Open orders in platform split** — open order waarde meegeteld in Saxo cash (MCP + Dashboard)
-- **Cron env vars** — Docker cron had geen toegang tot env vars. Nu als export statements via /etc/midodash-env.sh
-- **Template null check** — history_chart en allocation_chart null check voorkomt crash bij health render
+- **MCP portfolio Saxo fallback** — buffer fallback zat in catch-block maar getPositions() returnt null zonder exception. Nu als aparte check na try/catch (`516bd4e`)
+- **Open orders in platform split** — open order waarde meegeteld in Saxo cash (MCP + Dashboard) (`516bd4e`)
+- **Cron env vars** — Docker cron had geen toegang tot env vars. Nu als export statements via /etc/midodash-env.sh (`cc9522c`)
+- **Template null check** — alle 5 render_chart() calls bewaakt met null guards (`3e5cb0a`)
+- **Health check charts** — history_chart en allocation_chart werden niet gebouwd in health render path (`3e5cb0a`)
+- **Twig cache staleness** — compiled Twig cache op Docker volume overleefde deploys, force-remove in entrypoint (`a373468`)
 
 ### Added
-- **PENDING status** voor posities met open orders — onderdrukt valse REBAL/ONTBREEKT waarschuwingen
+- **PENDING status** voor posities met open orders — onderdrukt valse REBAL/ONTBREEKT waarschuwingen (`bbbab6c`)
 - **Saxo data waarschuwing** in platform verdeling als Saxo data ontbreekt
-- **Auth verificatie** na Saxo login in callback — diagnostisch flash message bij falen
+- **Auth verificatie** na Saxo login in callback — diagnostisch flash message bij falen (`cc9522c`)
+
+### Changed
+- **README.md** volledig bijgewerkt — MCP v2.0 (18 tools), database, Docker cron, Saxo proactive refresh, PENDING status (`3e5cb0a`)
+- **CLAUDE.md** bijgewerkt — key files, MCP tools, Docker pitfalls, env vars (`3e5cb0a`)
 
 ---
 
