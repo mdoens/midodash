@@ -785,7 +785,7 @@
         {% endif %}
 
         {# ── Saxo Performance Metrics ── #}
-        {% if r.saxo_twr|default(null) is not null %}
+        {% if r.saxo_twr|default(0) != 0 or r.saxo_sharpe|default(0) != 0 %}
         <div class="grid grid--4 mb-20">
             <div class="glass stat">
                 <div class="stat__label">TWR (Saxo)</div>
