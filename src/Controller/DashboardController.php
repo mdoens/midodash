@@ -168,39 +168,51 @@ class DashboardController extends AbstractController
         ReturnsService $returnsService,
         DashboardCacheService $dashboardCache,
         DataBufferService $dataBuffer,
+        \App\Repository\TransactionRepository $transactionRepository,
+        \Doctrine\DBAL\Connection $conn,
         LoggerInterface $logger,
     ): JsonResponse {
         $audit = [];
 
         // 1. Transaction DB totals
-        $conn = $this->container->get('doctrine')->getConnection();
         $table = $conn->quoteIdentifier('transaction');
 
         $audit['db_summary'] = $conn->executeQuery(
             "SELECT type, platform, COUNT(*) as cnt, SUM(COALESCE(amount_eur, amount)) as total FROM {$table} GROUP BY type, platform ORDER BY type, platform"
         )->fetchAllAssociative();
 
-        // 2. Saxo performance API
+        // 2. Saxo performance API (live)
         $audit['saxo_authenticated'] = $saxoClient->isAuthenticated();
         try {
             $perf = $saxoClient->getPerformanceMetrics();
-            $audit['saxo_performance'] = $perf;
+            $audit['saxo_performance_live'] = $perf;
         } catch (\Throwable $e) {
-            $audit['saxo_performance'] = 'ERROR: ' . $e->getMessage();
+            $audit['saxo_performance_live'] = 'ERROR: ' . $e->getMessage();
         }
 
         // 3. Saxo performance from DataBuffer
         $buffered = $dataBuffer->retrieve('saxo', 'performance');
         $audit['saxo_performance_buffer'] = $buffered !== null ? $buffered['data'] : null;
 
-        // 4. Cached allocation
+        // 4. Specific deposit sums
+        $audit['deposits'] = [
+            'ib_deposits' => $transactionRepository->sumByType('deposit', 'ib'),
+            'saxo_deposits_db' => $transactionRepository->sumByType('deposit', 'saxo'),
+            'ib_withdrawals' => $transactionRepository->sumByType('withdrawal', 'ib'),
+            'saxo_withdrawals_db' => $transactionRepository->sumByType('withdrawal', 'saxo'),
+            'all_dividends' => $transactionRepository->sumByType('dividend'),
+            'ib_dividends' => $transactionRepository->sumByType('dividend', 'ib'),
+            'saxo_dividends' => $transactionRepository->sumByType('dividend', 'saxo'),
+            'all_interest' => $transactionRepository->sumByType('interest'),
+        ];
+
+        // 5. Cached allocation + returns
         $cached = $dashboardCache->load();
         if ($cached !== null) {
             $audit['portfolio_total'] = $cached['allocation']['total_portfolio'] ?? null;
             $audit['ib_cash'] = $cached['allocation']['ib_cash'] ?? null;
             $audit['saxo_cash'] = $cached['allocation']['saxo_cash'] ?? null;
 
-            // 5. Returns calculation breakdown
             try {
                 $returns = $returnsService->getPortfolioReturns($cached['allocation']);
                 $audit['returns'] = $returns;
@@ -211,9 +223,9 @@ class DashboardController extends AbstractController
             $audit['cache'] = 'no cache available';
         }
 
-        // 6. Saxo cash transactions detail
-        $audit['saxo_cash_txs'] = $conn->executeQuery(
-            "SELECT type, position_name, amount, amount_eur, traded_at FROM {$table} WHERE platform = 'saxo' ORDER BY traded_at DESC LIMIT 30"
+        // 6. Saxo transactions detail
+        $audit['saxo_txs'] = $conn->executeQuery(
+            "SELECT type, position_name, amount, amount_eur, traded_at FROM {$table} WHERE platform = 'saxo' ORDER BY type, traded_at DESC LIMIT 30"
         )->fetchAllAssociative();
 
         return $this->json($audit);
