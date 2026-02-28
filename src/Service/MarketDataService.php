@@ -143,6 +143,40 @@ class MarketDataService
         ];
     }
 
+    /**
+     * Get real-time VIX from Yahoo Finance (^VIX ticker).
+     * Returns intraday VIX value instead of FRED's previous-day close.
+     */
+    public function getVixRealtime(): ?float
+    {
+        $cacheKey = 'market_vix_realtime';
+
+        return $this->cache->get($cacheKey, function (ItemInterface $item): ?float {
+            $item->expiresAfter(3600); // 1 hour cache
+
+            try {
+                $response = $this->httpClient->request('GET', self::YAHOO_URL . '%5EVIX', [
+                    'query' => ['interval' => '1d', 'range' => '1d'],
+                    'headers' => ['User-Agent' => 'Mozilla/5.0'],
+                    'timeout' => 15,
+                ]);
+
+                $result = $response->toArray(false)['chart']['result'][0] ?? null;
+                if ($result === null) {
+                    return null;
+                }
+
+                $price = $result['meta']['regularMarketPrice'] ?? null;
+
+                return $price !== null ? (float) $price : null;
+            } catch (\Throwable $e) {
+                $this->logger->warning('Yahoo VIX fetch error', ['error' => $e->getMessage()]);
+
+                return null;
+            }
+        });
+    }
+
     private function classifyDrawdown(float $pct): string
     {
         return match (true) {

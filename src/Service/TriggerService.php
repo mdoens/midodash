@@ -10,6 +10,7 @@ class TriggerService
         private readonly FredApiService $fredApi,
         private readonly EurostatService $eurostat,
         private readonly CalculationService $calculations,
+        private readonly MarketDataService $marketData,
     ) {}
 
     /**
@@ -45,8 +46,12 @@ class TriggerService
      */
     private function evaluateT1(): array
     {
-        $vix = $this->fredApi->getLatestValue('VIXCLS');
-        $value = $vix['value'] ?? 0.0;
+        // Primary: Yahoo Finance real-time VIX, fallback: FRED daily
+        $value = $this->marketData->getVixRealtime();
+        if ($value === null) {
+            $vix = $this->fredApi->getLatestValue('VIXCLS');
+            $value = $vix['value'] ?? 0.0;
+        }
 
         return ['active' => $value > 30, 'name' => 'Market Crash', 'value' => $value, 'threshold' => 30.0];
     }

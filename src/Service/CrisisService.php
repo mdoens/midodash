@@ -73,9 +73,23 @@ class CrisisService
      */
     private function checkVolatilitySignal(): array
     {
+        // Primary: Yahoo Finance real-time VIX (^VIX, 1h cache)
+        $latestVix = $this->marketData->getVixRealtime();
+
+        // FRED historical data for sustained days check (previous daily closes)
         $vixData = $this->fredApi->getSeriesObservations('VIXCLS', 10, 'desc');
 
-        if ($vixData === null) {
+        // Fallback: if Yahoo unavailable, use FRED's latest value
+        if ($latestVix === null && $vixData !== null) {
+            foreach ($vixData as $obs) {
+                if (isset($obs['value'])) {
+                    $latestVix = (float) $obs['value'];
+                    break;
+                }
+            }
+        }
+
+        if ($latestVix === null) {
             return [
                 'active' => false,
                 'value' => null,
@@ -85,20 +99,23 @@ class CrisisService
             ];
         }
 
-        $vixData = array_reverse($vixData);
+        // Count consecutive days > 30 from FRED historical data
         $consecutiveDays = 0;
-        $latestVix = null;
+        if ($vixData !== null) {
+            $reversed = array_reverse($vixData);
+            for ($i = count($reversed) - 1; $i >= 0; $i--) {
+                $value = $reversed[$i]['value'] ?? null;
+                if ($value !== null && $value > 30) {
+                    $consecutiveDays++;
+                } else {
+                    break;
+                }
+            }
+        }
 
-        for ($i = count($vixData) - 1; $i >= 0; $i--) {
-            $value = $vixData[$i]['value'] ?? null;
-            if ($latestVix === null && $value !== null) {
-                $latestVix = $value;
-            }
-            if ($value !== null && $value > 30) {
-                $consecutiveDays++;
-            } else {
-                break;
-            }
+        // If current real-time VIX is also > 30, count today too
+        if ($latestVix > 30 && $consecutiveDays === 0) {
+            $consecutiveDays = 1;
         }
 
         return [
@@ -106,7 +123,7 @@ class CrisisService
             'value' => $latestVix,
             'threshold' => 30,
             'sustained_days' => $consecutiveDays,
-            'description' => sprintf('VIX %.1f (>30 for %d/3 days)', $latestVix ?? 0, $consecutiveDays),
+            'description' => sprintf('VIX %.1f (>30 for %d/3 days)', $latestVix, $consecutiveDays),
         ];
     }
 

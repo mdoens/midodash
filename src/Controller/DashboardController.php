@@ -782,6 +782,12 @@ class DashboardController extends AbstractController
         $crisis = ['crisis_triggered' => false, 'active_signals' => 0, 'signals' => [], 'drawdown' => []];
         try {
             $crisis = $crisisService->checkAllSignals();
+
+            // Use Yahoo real-time VIX from crisis service (more current than FRED daily)
+            $crisisVix = $crisis['signals']['volatility']['value'] ?? null;
+            if ($crisisVix !== null) {
+                $macro['vix'] = $crisisVix;
+            }
         } catch (\Throwable $e) {
             $logger->error('Dashboard: Crisis data failed', ['error' => $e->getMessage()]);
         }

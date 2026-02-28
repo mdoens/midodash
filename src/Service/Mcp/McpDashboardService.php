@@ -9,6 +9,7 @@ use App\Service\DxyService;
 use App\Service\EurostatService;
 use App\Service\FredApiService;
 use App\Service\GoldPriceService;
+use App\Service\MarketDataService;
 use App\Service\TriggerService;
 
 class McpDashboardService
@@ -20,6 +21,7 @@ class McpDashboardService
         private readonly TriggerService $triggers,
         private readonly GoldPriceService $goldPrice,
         private readonly DxyService $dxyService,
+        private readonly MarketDataService $marketData,
     ) {}
 
     public function generate(string $format = 'markdown', bool $includeWarnings = true): string|array
@@ -38,7 +40,12 @@ class McpDashboardService
      */
     private function collectData(): array
     {
+        // Primary: Yahoo Finance real-time VIX, fallback: FRED daily
+        $yahooVix = $this->marketData->getVixRealtime();
         $vix = $this->fredApi->getLatestValue('VIXCLS');
+        if ($yahooVix !== null) {
+            $vix = ['value' => $yahooVix, 'date' => date('Y-m-d')];
+        }
         $hySpread = $this->fredApi->getLatestValue('BAMLH0A0HYM2');
         $igSpread = $this->fredApi->getLatestValue('BAMLC0A4CBBB');
         $yieldCurve = $this->fredApi->getLatestValue('T10Y2Y');
