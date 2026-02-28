@@ -1,5 +1,20 @@
 # Changelog — MidoDash
 
+## 2026-02-28
+
+### Fixed
+- **MCP portfolio Saxo fallback** — buffer fallback zat in catch-block maar getPositions() returnt null zonder exception. Nu als aparte check na try/catch
+- **Open orders in platform split** — open order waarde meegeteld in Saxo cash (MCP + Dashboard)
+- **Cron env vars** — Docker cron had geen toegang tot env vars. Nu als export statements via /etc/midodash-env.sh
+- **Template null check** — history_chart en allocation_chart null check voorkomt crash bij health render
+
+### Added
+- **PENDING status** voor posities met open orders — onderdrukt valse REBAL/ONTBREEKT waarschuwingen
+- **Saxo data waarschuwing** in platform verdeling als Saxo data ontbreekt
+- **Auth verificatie** na Saxo login in callback — diagnostisch flash message bij falen
+
+---
+
 ## 2026-02-27 — Saxo Token Fix
 
 ### Fixed
