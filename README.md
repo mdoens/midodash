@@ -485,8 +485,33 @@ The Dockerfile builds a production-ready image:
 | `*/15 * * * *` | `app:dashboard:warmup` | Pre-compute all dashboard data |
 | `*/30 * * * *` | `app:ib:fetch` | Refresh IB Flex statement |
 | `0 * * * *` | `app:momentum:warmup` | Update momentum scores + regime |
+| `30 17 * * 1-5` | `app:prices:sync` | Yahoo Finance price history |
+| `0 */6 * * *` | `app:transactions:import` | IB + Saxo transaction import |
 
-All cron jobs source `/etc/midodash-env.sh` for Docker environment variables.
+All cron jobs source `/etc/midodash-env.sh` for Docker environment variables. Output is logged to `var/log/cron.log` (directory created by entrypoint on startup).
+
+### Coolify API — Log Access
+
+Container logs can be retrieved via the Coolify API without SSH:
+
+```bash
+# Runtime container logs (last hour)
+curl -s -H "Authorization: Bearer $COOLIFY_TOKEN" \
+  "https://coolify.barcelona2.doens.nl/api/v1/applications/mw0ks0s8sc8cw0csocwksskk/logs?since=3600"
+
+# Deployment history & logs
+curl -s -H "Authorization: Bearer $COOLIFY_TOKEN" \
+  "https://coolify.barcelona2.doens.nl/api/v1/deployments"
+
+# Filter for specific keywords (e.g., Saxo token issues)
+curl -s ... | python3 -c "
+import sys, json
+for l in json.load(sys.stdin)['logs'].split('\n'):
+    if 'saxo' in l.lower(): print(l[:200])
+"
+```
+
+API docs: `https://coolify.barcelona2.doens.nl/docs/api-reference`
 
 ---
 

@@ -68,7 +68,24 @@ Non-secret env vars (safe in `.env`):
 ### Known Docker Pitfalls
 - Compiled Twig templates on Docker volume survive deploys — `docker-entrypoint.sh` force-removes `var/cache/prod/twig`
 - Cron jobs fail silently without env vars — always source `/etc/midodash-env.sh`
+- Cron log directory (`var/log/`) must exist on Docker volume — entrypoint creates it via `mkdir -p`
 - Saxo tokens must be on persistent volume AND in database (dual-write via `DataBufferService`)
+
+### Coolify API — Log Access
+Container logs ophalen via Coolify API (token in `.env.local` als `COOLIFY_TOKEN`):
+```bash
+# Runtime logs (last hour)
+curl -s -H "Authorization: Bearer $COOLIFY_TOKEN" \
+  "https://coolify.barcelona2.doens.nl/api/v1/applications/mw0ks0s8sc8cw0csocwksskk/logs?since=3600"
+
+# Deployment logs
+curl -s -H "Authorization: Bearer $COOLIFY_TOKEN" \
+  "https://coolify.barcelona2.doens.nl/api/v1/deployments"
+
+# Filter logs (pipe through python/jq)
+curl -s ... | python3 -c "import sys,json; [print(l[:200]) for l in json.load(sys.stdin)['logs'].split('\n') if 'saxo' in l.lower()]"
+```
+Nuttig voor debugging zonder SSH — Coolify API docs: `https://coolify.barcelona2.doens.nl/docs/api-reference`
 
 ---
 

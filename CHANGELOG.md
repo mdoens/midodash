@@ -1,5 +1,17 @@
 # Changelog — MidoDash
 
+## 2026-02-28 (c)
+
+### Fixed
+- **Cron jobs draaiden niet** — `var/log/` directory bestond niet op Docker volume, waardoor `>> var/log/cron.log` redirect faalde en alle cron commando's (incl. Saxo token refresh) silently niet uitvoerden. Root cause van herhaaldelijke Saxo token expiry.
+
+### Changed
+- **docker-entrypoint.sh** — `mkdir -p var/log` toegevoegd vóór cron start
+- **CLAUDE.md** — Coolify API log access documentatie toegevoegd
+- **README.md** — Coolify API log access, cron schedule tabel compleet
+
+---
+
 ## 2026-02-28 (b)
 
 ### Fixed

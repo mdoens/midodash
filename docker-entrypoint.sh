@@ -5,6 +5,10 @@ set -e
 # Write as export statements so they can be sourced by cron wrapper
 printenv | grep -vE '^(HOME|PATH|SHELL|USER|LOGNAME|_)=' | sed 's/=\(.*\)/="\1"/' | sed 's/^/export /' > /etc/midodash-env.sh
 
+# Ensure cron log directory exists on Docker volume (cron output redirect fails if dir missing)
+mkdir -p /var/www/html/var/log
+touch /var/www/html/var/log/cron.log
+
 # Start cron in background
 cron
 
