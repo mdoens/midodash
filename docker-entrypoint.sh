@@ -10,6 +10,8 @@ cron
 
 # Rebuild cache for new code (volume has stale cache from previous deploy)
 echo "Clearing and warming up Symfony cache..."
+# Force-remove compiled Twig cache on the Docker volume (cache:clear may miss stale files)
+rm -rf /var/www/html/var/cache/prod/twig /var/www/html/var/cache/prod/pools /var/www/html/var/cache/prod/url_*
 php /var/www/html/bin/console cache:clear --env=prod --no-warmup || true
 php /var/www/html/bin/console cache:warmup --env=prod || true
 
