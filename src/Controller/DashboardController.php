@@ -228,6 +228,36 @@ class DashboardController extends AbstractController
             "SELECT type, position_name, amount, amount_eur, traded_at FROM {$table} WHERE platform = 'saxo' ORDER BY type, traded_at DESC LIMIT 30"
         )->fetchAllAssociative();
 
+        // 7. Raw Saxo cash transactions from API (for debugging import mapping)
+        try {
+            $rawCashTxs = $saxoClient->getCashTransactions();
+            if ($rawCashTxs !== null) {
+                $audit['saxo_raw_cash_sample'] = array_slice($rawCashTxs, 0, 30);
+                $audit['saxo_raw_cash_count'] = count($rawCashTxs);
+
+                // Summarize by TransactionType
+                $typeSummary = [];
+                foreach ($rawCashTxs as $rtx) {
+                    $txType = (string) ($rtx['TransactionType'] ?? 'unknown');
+                    $event = (string) ($rtx['Event'] ?? '');
+                    $key = $txType . '|' . $event;
+                    if (!isset($typeSummary[$key])) {
+                        $typeSummary[$key] = ['count' => 0, 'total' => 0.0];
+                    }
+                    $typeSummary[$key]['count']++;
+                    $typeSummary[$key]['total'] += (float) ($rtx['BookedAmount'] ?? $rtx['Amount'] ?? 0);
+                }
+                $audit['saxo_raw_type_summary'] = $typeSummary;
+            }
+        } catch (\Throwable $e) {
+            $audit['saxo_raw_cash'] = 'ERROR: ' . $e->getMessage();
+        }
+
+        // 8. Raw IB cash transaction types (check for dividends)
+        $audit['ib_tx_types'] = $conn->executeQuery(
+            "SELECT type, COUNT(*) as cnt, SUM(COALESCE(amount_eur, amount)) as total FROM {$table} WHERE platform = 'ib' GROUP BY type ORDER BY type"
+        )->fetchAllAssociative();
+
         return $this->json($audit);
     }
 
