@@ -273,17 +273,22 @@ class DashboardController extends AbstractController
                         'trade_nodes' => count($trades),
                         'cash_transaction_nodes' => count($cashTxs),
                     ];
-                    // Show first 3 CashTransaction nodes
+                    // Summarize CashTransaction types
                     if (count($cashTxs) > 0) {
-                        $samples = [];
-                        foreach (array_slice($cashTxs, 0, 5) as $ct) {
+                        $typeSummary = [];
+                        foreach ($cashTxs as $ct) {
                             $attrs = [];
                             foreach ($ct->attributes() as $k => $v) {
                                 $attrs[(string) $k] = (string) $v;
                             }
-                            $samples[] = $attrs;
+                            $type = $attrs['type'] ?? 'unknown';
+                            if (!isset($typeSummary[$type])) {
+                                $typeSummary[$type] = ['count' => 0, 'total' => 0.0];
+                            }
+                            $typeSummary[$type]['count']++;
+                            $typeSummary[$type]['total'] += (float) ($attrs['amount'] ?? 0);
                         }
-                        $audit['ib_cash_tx_samples'] = $samples;
+                        $audit['ib_cash_tx_type_summary'] = $typeSummary;
                     }
                 }
             }
