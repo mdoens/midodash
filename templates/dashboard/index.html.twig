@@ -421,6 +421,11 @@
             {# Platform Verdeling #}
             <div class="glass">
                 <div class="section-label"><span class="section-label__text">Platform Verdeling</span></div>
+                {% if allocation.platform_split.saxo == 0 and saxo_authenticated %}
+                    <div style="background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); border-radius: 6px; padding: 6px 10px; margin-bottom: 10px; font-size: 11px; color: #f59e0b;">
+                        Saxo data ontbreekt — totalen zijn onvolledig
+                    </div>
+                {% endif %}
                 {% set ibPct = allocation.total_portfolio > 0 ? (allocation.platform_split.ibkr / allocation.total_portfolio * 100) : 0 %}
                 {% set saxoPct = allocation.total_portfolio > 0 ? (allocation.platform_split.saxo / allocation.total_portfolio * 100) : 0 %}
                 <div class="mb-14">

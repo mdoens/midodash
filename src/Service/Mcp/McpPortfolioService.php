@@ -66,7 +66,7 @@ class McpPortfolioService
             'timestamp' => (new \DateTime())->format('c'),
             'strategy_version' => 'v8.0',
             'data_freshness' => [
-                'saxo' => $this->saxoClient->isAuthenticated() ? 'live' : 'buffered',
+                'saxo' => $this->isSaxoLive($allocation) ? 'live' : 'buffered',
                 'ib' => $this->ibClient->getCacheTimestamp() !== null ? 'live' : 'buffered',
             ],
             'summary' => [
@@ -185,18 +185,38 @@ class McpPortfolioService
     {
         $ibPositions = $this->ibClient->getPositions();
         $saxoPositions = null;
-        $ibCash = 0.0;
         $saxoCash = 0.0;
 
         try {
             $saxoPositions = $this->saxoClient->getPositions();
             $balance = $this->saxoClient->getAccountBalance();
             $saxoCash = (float) ($balance['CashBalance'] ?? 0);
+
+            // Include open order value in Saxo cash — Saxo deducts from CashBalance
+            // when order is placed, but position doesn't exist yet
+            $openOrders = $this->saxoClient->getOpenOrders();
+            if ($openOrders !== null) {
+                foreach ($openOrders as $order) {
+                    $saxoCash += (float) $order['order_value'];
+                }
+            }
         } catch (\Throwable $e) {
-            $this->logger->debug('Saxo unavailable, trying DataBuffer fallback', ['error' => $e->getMessage()]);
+            $this->logger->debug('Saxo data fetch failed', ['error' => $e->getMessage()]);
+        }
+
+        // Fallback to DataBuffer when Saxo returns null (auth expired, API down)
+        if ($saxoPositions === null) {
             $buffered = $this->dataBuffer->retrieve('saxo', 'positions');
             if ($buffered !== null) {
                 $saxoPositions = $buffered['data'];
+                $this->logger->info('Saxo using buffered positions for MCP');
+            }
+
+            if ($saxoCash === 0.0) {
+                $balanceBuffered = $this->dataBuffer->retrieve('saxo', 'balance');
+                if ($balanceBuffered !== null) {
+                    $saxoCash = (float) ($balanceBuffered['data']['CashBalance'] ?? 0);
+                }
             }
         }
 
@@ -334,5 +354,21 @@ class McpPortfolioService
         $md .= sprintf("| Within 3 days (+IBGS) | €%s |\n", number_format($deploy['within_3d'], 2, ',', '.'));
 
         return $md;
+    }
+
+    /**
+     * Check if Saxo data is live by verifying Saxo positions have values.
+     *
+     * @param array<string, mixed> $allocation
+     */
+    private function isSaxoLive(array $allocation): bool
+    {
+        foreach ($allocation['positions'] as $pos) {
+            if (($pos['platform'] ?? '') === 'Saxo' && ($pos['value'] ?? 0) > 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
