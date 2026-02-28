@@ -179,6 +179,51 @@ class DashboardController extends AbstractController
         ]);
     }
 
+    #[Route('/health/cron', name: 'health_cron')]
+    public function debugCron(): JsonResponse
+    {
+        $projectDir = (string) $this->getParameter('kernel.project_dir');
+        $cronLog = $projectDir . '/var/log/cron.log';
+        $result = [];
+
+        // Cron log tail
+        if (file_exists($cronLog)) {
+            $lines = file($cronLog, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+            $result['cron_log_lines'] = count($lines);
+            $result['cron_log_tail'] = array_slice($lines, -50);
+            $result['cron_log_size'] = filesize($cronLog);
+            $result['cron_log_modified'] = date('Y-m-d H:i:s', (int) filemtime($cronLog));
+        } else {
+            $result['cron_log'] = 'File not found: ' . $cronLog;
+        }
+
+        // Check crontab
+        $result['crontab'] = shell_exec('crontab -l 2>&1') ?? 'could not read';
+
+        // Check cron process
+        $result['cron_process'] = shell_exec('ps aux | grep -i cron | grep -v grep 2>&1') ?? 'not found';
+
+        // Check env file
+        $envFile = '/etc/midodash-env.sh';
+        $result['env_file_exists'] = file_exists($envFile);
+        if (file_exists($envFile)) {
+            $result['env_file_size'] = filesize($envFile);
+            // Show variable names only (not values — security)
+            $envContent = file_get_contents($envFile) ?: '';
+            preg_match_all('/export (\w+)=/', $envContent, $matches);
+            $result['env_vars'] = $matches[1] ?? [];
+        }
+
+        // Token file info
+        $tokenFile = $projectDir . '/var/saxo_tokens.json';
+        if (file_exists($tokenFile)) {
+            $result['token_file_modified'] = date('Y-m-d H:i:s', (int) filemtime($tokenFile));
+            $result['token_file_age_seconds'] = time() - (int) filemtime($tokenFile);
+        }
+
+        return $this->json($result);
+    }
+
     #[Route('/health/audit', name: 'health_audit')]
     public function auditReturns(
         SaxoClient $saxoClient,
