@@ -678,8 +678,11 @@ The MCP endpoint allows cross-origin requests from:
 | `GET /health` | Service status (200 OK / 503 Degraded) |
 | `GET /health/returns` | Full template render test with chart validation |
 | `GET /health/ib` | IB data diagnostics |
-| `GET /health/saxo` | Saxo token status + TTL |
-| `GET /health/import` | Transaction import status |
+| `GET /health/saxo` | Saxo token status, expiry, refresh TTL, debug info |
+| `GET /health/import` | Transaction import status (IB + Saxo trades + cash) |
+| `GET /health/cron` | Cron log tail, process status, env file check |
+| `GET /health/audit` | Full audit: DB summary, Saxo API data, deposits breakdown |
+| `GET /health/reimport-saxo` | Clean Saxo transaction re-import (delete + reimport) |
 
 ### Database
 
@@ -696,4 +699,15 @@ Migrations run via `app:db:migrate` (Doctrine SchemaTool `updateSchema`), NOT Do
 - Saxo OAuth2 tokens (`saxo_tokens.json`)
 - Session files (`sessions/`)
 - Cached data (dashboard, IB, Saxo, momentum)
-- **Note**: Compiled Twig cache on the volume can become stale — `docker-entrypoint.sh` force-removes it on startup
+- Cron log (`log/cron.log`)
+
+### Docker Pitfalls (Critical)
+
+| Pitfall | Impact | Fix |
+|---------|--------|-----|
+| Compiled Twig cache survives deploys | Stale templates | `docker-entrypoint.sh` force-removes `var/cache/prod/twig` |
+| Cron has no access to Docker env vars | All cron jobs fail silently | Entrypoint exports env to `/etc/midodash-env.sh`, each cron job sources it |
+| Cron log directory missing on volume | `>> var/log/cron.log` redirect fails, command never executes | Entrypoint runs `mkdir -p var/log` before starting cron |
+| PHP not in cron PATH | `php: command not found` | Crontab includes `PATH=/usr/local/sbin:/usr/local/bin:...` |
+| Entrypoint runs as root, Apache as www-data | Permission denied on `saxo_tokens.json`, `dashboard_cache.json` | Entrypoint runs `chown -R www-data:www-data var/` after warmup |
+| Token file stale but DB has newer tokens | `loadTokens()` returns expired tokens | `loadTokens()` compares `created_at` from file vs DB, uses newest |
