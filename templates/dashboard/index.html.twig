@@ -901,7 +901,7 @@
         {% endif %}
 
         {# ── Portfolio waarde chart (als er snapshots zijn) ── #}
-        {% if history|default([])|length > 1 %}
+        {% if history|default([])|length > 1 and history_chart is defined and history_chart is not null %}
         <div class="grid grid--2 mt-16">
             <div class="glass">
                 <div class="section-label"><span class="section-label__text">Portfolio Waarde</span></div>
@@ -909,12 +909,14 @@
                     {{ render_chart(history_chart) }}
                 </div>
             </div>
+            {% if allocation_chart is defined and allocation_chart is not null %}
             <div class="glass">
                 <div class="section-label"><span class="section-label__text">Asset Allocatie</span></div>
                 <div class="chart-wrap chart-wrap--h280">
                     {{ render_chart(allocation_chart) }}
                 </div>
             </div>
+            {% endif %}
         </div>
         {% endif %}
 

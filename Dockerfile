@@ -57,7 +57,7 @@ ENV APP_ENV=prod
 ENV APP_DEBUG=0
 
 # Cron jobs
-RUN printf '*/15 * * * * cd /var/www/html && php bin/console app:dashboard:warmup >> var/log/cron.log 2>&1\n*/15 * * * * cd /var/www/html && php bin/console app:saxo:refresh >> var/log/cron.log 2>&1\n*/30 * * * * cd /var/www/html && php bin/console app:ib:fetch >> var/log/cron.log 2>&1\n0 * * * * cd /var/www/html && php bin/console app:momentum:warmup >> var/log/cron.log 2>&1\n30 17 * * 1-5 cd /var/www/html && php bin/console app:prices:sync --days=5 >> var/log/cron.log 2>&1\n0 19 * * * cd /var/www/html && php bin/console app:transactions:import >> var/log/cron.log 2>&1\n' > /etc/cron.d/midodash \
+RUN printf 'SHELL=/bin/bash\n*/15 * * * * . /etc/midodash-env.sh && cd /var/www/html && php bin/console app:saxo:refresh >> var/log/cron.log 2>&1\n*/15 * * * * . /etc/midodash-env.sh && cd /var/www/html && php bin/console app:dashboard:warmup >> var/log/cron.log 2>&1\n*/30 * * * * . /etc/midodash-env.sh && cd /var/www/html && php bin/console app:ib:fetch >> var/log/cron.log 2>&1\n0 * * * * . /etc/midodash-env.sh && cd /var/www/html && php bin/console app:momentum:warmup >> var/log/cron.log 2>&1\n30 17 * * 1-5 . /etc/midodash-env.sh && cd /var/www/html && php bin/console app:prices:sync --days=5 >> var/log/cron.log 2>&1\n0 19 * * * . /etc/midodash-env.sh && cd /var/www/html && php bin/console app:transactions:import >> var/log/cron.log 2>&1\n' > /etc/cron.d/midodash \
     && chmod 0644 /etc/cron.d/midodash \
     && crontab /etc/cron.d/midodash
 

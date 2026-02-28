@@ -2,7 +2,8 @@
 set -e
 
 # Pass env vars to cron (cron has no access to Docker env vars by default)
-printenv | grep -vE '^(HOME|PATH|SHELL|USER|LOGNAME|_)=' > /etc/environment
+# Write as export statements so they can be sourced by cron wrapper
+printenv | grep -vE '^(HOME|PATH|SHELL|USER|LOGNAME|_)=' | sed 's/=\(.*\)/="\1"/' | sed 's/^/export /' > /etc/midodash-env.sh
 
 # Start cron in background
 cron

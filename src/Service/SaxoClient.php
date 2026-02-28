@@ -983,9 +983,22 @@ class SaxoClient
         if (!is_dir($dir)) {
             mkdir($dir, 0755, true);
         }
-        file_put_contents($this->tokenFile, json_encode($tokens, JSON_PRETTY_PRINT));
+        $written = file_put_contents($this->tokenFile, json_encode($tokens, JSON_PRETTY_PRINT));
 
-        $this->logger->info('Saxo tokens saved to database and file');
+        if ($written === false) {
+            $this->logger->error('Saxo token file write FAILED', ['path' => $this->tokenFile]);
+        } else {
+            $this->logger->info('Saxo tokens saved', [
+                'file' => $written . ' bytes',
+                'expires_in' => $tokens['expires_in'] ?? 'unknown',
+                'has_refresh' => isset($tokens['refresh_token']),
+            ]);
+        }
+
+        // Verify: read back from both sources to confirm persistence
+        $fileCheck = file_exists($this->tokenFile) && file_get_contents($this->tokenFile) !== false;
+        $dbCheck = $this->dataBuffer->retrieve('saxo', 'tokens') !== null;
+        $this->logger->info('Saxo token save verification', ['file_ok' => $fileCheck, 'db_ok' => $dbCheck]);
     }
 
     /**

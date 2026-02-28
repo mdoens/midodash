@@ -49,7 +49,13 @@ class SaxoAuthController extends AbstractController
             $saxoClient->exchangeCode($code);
             // Invalidate dashboard cache so Saxo data is fetched fresh
             $dashboardCache->invalidate();
-            $this->addFlash('success', 'Saxo login succesvol! Tokens opgeslagen.');
+
+            // Verify authentication works after token exchange
+            if ($saxoClient->isAuthenticated()) {
+                $this->addFlash('success', 'Saxo login succesvol! Tokens opgeslagen.');
+            } else {
+                $this->addFlash('error', 'Saxo tokens opgeslagen maar authenticatie-check faalt — controleer logs.');
+            }
         } catch (\Throwable $e) {
             $this->addFlash('error', 'Token exchange mislukt: ' . $e->getMessage());
         }
