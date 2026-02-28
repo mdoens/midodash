@@ -162,6 +162,63 @@ class DashboardController extends AbstractController
         ]);
     }
 
+    #[Route('/health/audit', name: 'health_audit')]
+    public function auditReturns(
+        SaxoClient $saxoClient,
+        ReturnsService $returnsService,
+        DashboardCacheService $dashboardCache,
+        DataBufferService $dataBuffer,
+        LoggerInterface $logger,
+    ): JsonResponse {
+        $audit = [];
+
+        // 1. Transaction DB totals
+        $conn = $this->container->get('doctrine')->getConnection();
+        $table = $conn->quoteIdentifier('transaction');
+
+        $audit['db_summary'] = $conn->executeQuery(
+            "SELECT type, platform, COUNT(*) as cnt, SUM(COALESCE(amount_eur, amount)) as total FROM {$table} GROUP BY type, platform ORDER BY type, platform"
+        )->fetchAllAssociative();
+
+        // 2. Saxo performance API
+        $audit['saxo_authenticated'] = $saxoClient->isAuthenticated();
+        try {
+            $perf = $saxoClient->getPerformanceMetrics();
+            $audit['saxo_performance'] = $perf;
+        } catch (\Throwable $e) {
+            $audit['saxo_performance'] = 'ERROR: ' . $e->getMessage();
+        }
+
+        // 3. Saxo performance from DataBuffer
+        $buffered = $dataBuffer->retrieve('saxo', 'performance');
+        $audit['saxo_performance_buffer'] = $buffered !== null ? $buffered['data'] : null;
+
+        // 4. Cached allocation
+        $cached = $dashboardCache->load();
+        if ($cached !== null) {
+            $audit['portfolio_total'] = $cached['allocation']['total_portfolio'] ?? null;
+            $audit['ib_cash'] = $cached['allocation']['ib_cash'] ?? null;
+            $audit['saxo_cash'] = $cached['allocation']['saxo_cash'] ?? null;
+
+            // 5. Returns calculation breakdown
+            try {
+                $returns = $returnsService->getPortfolioReturns($cached['allocation']);
+                $audit['returns'] = $returns;
+            } catch (\Throwable $e) {
+                $audit['returns'] = 'ERROR: ' . $e->getMessage();
+            }
+        } else {
+            $audit['cache'] = 'no cache available';
+        }
+
+        // 6. Saxo cash transactions detail
+        $audit['saxo_cash_txs'] = $conn->executeQuery(
+            "SELECT type, position_name, amount, amount_eur, traded_at FROM {$table} WHERE platform = 'saxo' ORDER BY traded_at DESC LIMIT 30"
+        )->fetchAllAssociative();
+
+        return $this->json($audit);
+    }
+
     #[Route('/health/import', name: 'health_import')]
     public function triggerImport(
         IbClient $ibClient,
