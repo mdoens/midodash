@@ -47,6 +47,11 @@ php /var/www/html/bin/console app:momentum:warmup || true
 echo "Warming up dashboard cache..."
 php /var/www/html/bin/console app:dashboard:warmup || true
 
+# Fix ownership: entrypoint runs as root but Apache runs as www-data
+# Without this, files created during warmup (tokens, cache, logs) are root-owned
+# and www-data cannot write to them (Permission denied on saxo_tokens.json, dashboard_cache.json, etc.)
+chown -R www-data:www-data /var/www/html/var
+
 echo "Startup warmup complete, starting Apache..."
 
 # Start Apache in foreground

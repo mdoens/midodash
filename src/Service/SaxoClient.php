@@ -1051,31 +1051,57 @@ class SaxoClient
      */
     private function loadTokens(): ?array
     {
+        $fileTokens = null;
+        $dbTokens = null;
+
         // Try file first (fast)
         if (file_exists($this->tokenFile)) {
             $content = file_get_contents($this->tokenFile);
             if ($content !== false) {
-                $tokens = json_decode($content, true);
-                if (is_array($tokens) && isset($tokens['access_token'])) {
-                    return $tokens;
+                $decoded = json_decode($content, true);
+                if (is_array($decoded) && isset($decoded['access_token'])) {
+                    $fileTokens = $decoded;
                 }
             }
         }
 
-        // Fallback: load from database (survives deploys)
+        // Also check database (may have newer tokens if file write failed due to permissions)
         $buffered = $this->dataBuffer->retrieve('saxo', 'tokens');
         if ($buffered !== null && isset($buffered['data']['access_token'])) {
-            $tokens = $buffered['data'];
+            $dbTokens = $buffered['data'];
+        }
+
+        // Use whichever source has the most recent tokens (by created_at)
+        if ($fileTokens !== null && $dbTokens !== null) {
+            $fileCreatedAt = (int) ($fileTokens['created_at'] ?? 0);
+            $dbCreatedAt = (int) ($dbTokens['created_at'] ?? 0);
+
+            if ($dbCreatedAt > $fileCreatedAt) {
+                $this->logger->info('Saxo: DB tokens are newer than file, using DB', [
+                    'file_created' => date('H:i:s', $fileCreatedAt),
+                    'db_created' => date('H:i:s', $dbCreatedAt),
+                ]);
+
+                // Try to sync file with DB tokens
+                @file_put_contents($this->tokenFile, json_encode($dbTokens, JSON_PRETTY_PRINT));
+
+                return $dbTokens;
+            }
+
+            return $fileTokens;
+        }
+
+        if ($fileTokens !== null) {
+            return $fileTokens;
+        }
+
+        if ($dbTokens !== null) {
             $this->logger->info('Saxo tokens restored from database');
 
             // Re-create the file for fast subsequent reads
-            $dir = dirname($this->tokenFile);
-            if (!is_dir($dir)) {
-                mkdir($dir, 0755, true);
-            }
-            file_put_contents($this->tokenFile, json_encode($tokens, JSON_PRETTY_PRINT));
+            @file_put_contents($this->tokenFile, json_encode($dbTokens, JSON_PRETTY_PRINT));
 
-            return $tokens;
+            return $dbTokens;
         }
 
         return null;

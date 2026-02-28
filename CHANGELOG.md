@@ -3,10 +3,12 @@
 ## 2026-02-28 (c)
 
 ### Fixed
-- **Cron jobs draaiden niet** — `var/log/` directory bestond niet op Docker volume, waardoor `>> var/log/cron.log` redirect faalde en alle cron commando's (incl. Saxo token refresh) silently niet uitvoerden. Root cause van herhaaldelijke Saxo token expiry.
+- **Cron jobs draaiden niet** — `var/log/` directory bestond niet op Docker volume, waardoor `>> var/log/cron.log` redirect faalde en alle cron commando's (incl. Saxo token refresh) silently niet uitvoerden
+- **Saxo token file permissions** — entrypoint draait als root, Apache als www-data. Files op Docker volume waren root-owned → `Permission denied` bij schrijven `saxo_tokens.json` en `dashboard_cache.json`. Fix: `chown -R www-data:www-data var/` na warmup
+- **Saxo token loadTokens()** — las altijd het bestand eerst, zelfs als DB nieuwere tokens had (na gefaalde file write). Nu vergelijkt `created_at` timestamps en gebruikt de nieuwste bron
 
 ### Changed
-- **docker-entrypoint.sh** — `mkdir -p var/log` toegevoegd vóór cron start
+- **docker-entrypoint.sh** — `mkdir -p var/log` + `chown -R www-data:www-data var/`
 - **CLAUDE.md** — Coolify API log access documentatie toegevoegd
 - **README.md** — Coolify API log access, cron schedule tabel compleet
 
