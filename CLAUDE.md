@@ -49,6 +49,7 @@ Secret env vars:
 - `SAXO_APP_KEY`, `SAXO_APP_SECRET`
 - `DASHBOARD_PASSWORD_HASH`
 - `COOLIFY_TOKEN` (used by `deploy.sh`, stored in `.env.local`)
+- `MCP_API_TOKENS` (comma-separated bearer tokens for MCP endpoints)
 - `APP_SECRET`
 
 Non-secret env vars (safe in `.env`):
@@ -59,6 +60,15 @@ Non-secret env vars (safe in `.env`):
 - Image: `php:8.4-apache`
 - DocumentRoot: `public/`
 - Build: Dockerfile in project root
+- Volume: `midodash-var` → `/var/www/html/var` (tokens, sessions, cache persist across deploys)
+- Cron: sources `/etc/midodash-env.sh` for env vars (Docker cron has no access to container env vars)
+- Entrypoint: `docker-entrypoint.sh` — force-removes stale Twig cache, runs migrations, warmup, then Apache
+- Database: MySQL in production (Coolify `DATABASE_URL`), SQLite locally (`var/data/mido.sqlite`)
+
+### Known Docker Pitfalls
+- Compiled Twig templates on Docker volume survive deploys — `docker-entrypoint.sh` force-removes `var/cache/prod/twig`
+- Cron jobs fail silently without env vars — always source `/etc/midodash-env.sh`
+- Saxo tokens must be on persistent volume AND in database (dual-write via `DataBufferService`)
 
 ---
 
@@ -119,15 +129,33 @@ php bin/console cache:clear
 
 ## Key Files
 
-- `src/Service/SaxoClient.php` — Saxo OAuth2 + positions API
-- `src/Service/IbClient.php` — Interactive Brokers Flex API
-- `src/Service/MomentumService.php` — ETF momentum rotation strategy
-- `src/Controller/DashboardController.php` — Main dashboard
-- `src/Controller/SaxoAuthController.php` — Saxo OAuth flow
+### Controllers
+- `src/Controller/DashboardController.php` — Main dashboard + health checks (`/health/returns`, `/health/saxo`, etc.)
+- `src/Controller/McpController.php` — MCP server endpoint (18 tools, bearer token auth)
+- `src/Controller/SaxoAuthController.php` — Saxo OAuth2 flow with post-exchange verification
 - `src/Controller/LoginController.php` — Symfony form login
-- `templates/dashboard/index.html.twig` — Dashboard template
+
+### Core Services
+- `src/Service/SaxoClient.php` — Saxo OAuth2 + positions API (proactive refresh at 50% lifetime, token merge, dual-write persistence)
+- `src/Service/IbClient.php` — Interactive Brokers Flex API
+- `src/Service/PortfolioService.php` — Allocation engine with open orders matching + PENDING status
+- `src/Service/ReturnsService.php` — P/L calculation, dividends, total return
+- `src/Service/MomentumService.php` — ETF momentum rotation strategy
+- `src/Service/DataBufferService.php` — API response caching + fallback when APIs unavailable
+- `src/Service/PortfolioSnapshotService.php` — Daily portfolio snapshots for history charts
+
+### MCP Services (v2.0)
+- `src/Service/Mcp/McpPortfolioService.php` — Portfolio snapshot + cash overview (Saxo buffer fallback OUTSIDE catch block)
+- `src/Service/Mcp/McpPerformanceService.php` — Performance history + return attribution
+- `src/Service/Mcp/McpRiskService.php` — Risk metrics + stress testing
+- `src/Service/Mcp/McpPlanningService.php` — Cost analysis, fundamentals, rebalance advisor, scenario planner
+
+### Config & Deploy
+- `config/mido_v65.yaml` — Strategy v8.0 config (targets, asset classes, momentum, symbol_map, TER, look-through)
+- `templates/dashboard/index.html.twig` — Dashboard template (all `render_chart` calls have null guards)
+- `docker-entrypoint.sh` — Startup: env export, Twig cache cleanup, migrations, warmup
+- `Dockerfile` — PHP 8.4 Apache image with cron (sources `/etc/midodash-env.sh`)
 - `deploy.sh` — Coolify deployment script
-- `Dockerfile` — PHP 8.4 Apache image
 
 ---
 
@@ -145,13 +173,28 @@ php bin/console cache:clear
 - Empty `MCP_API_TOKENS` = auth disabled (backwards compatible)
 - Tokens stored in `.env.local` (local) and Coolify env vars (production)
 
-### Tools (6)
-- `mido_macro_dashboard` — Full macro economic dashboard
-- `mido_indicator` — Individual indicator lookup
-- `mido_triggers` — Strategy trigger evaluation
-- `mido_crisis_dashboard` — Crisis signal status
-- `mido_drawdown_calculator` — Market drawdown calculation
-- `mido_momentum_rebalancing` — ETF momentum rebalancing report
+### Tools (18)
+
+**Macro & Strategy** (6):
+- `mido_macro_dashboard`, `mido_indicator`, `mido_triggers`, `mido_crisis_dashboard`, `mido_drawdown_calculator`, `mido_momentum_rebalancing`
+
+**Portfolio & Cash** (3):
+- `mido_portfolio_snapshot` — Live positions, drift, P/L, data freshness
+- `mido_cash_overview` — Cash per platform, open orders, dry powder
+- `mido_currency_exposure` — FX exposure breakdown
+
+**Performance** (2):
+- `mido_performance_history` — TWR, benchmark comparison
+- `mido_attribution` — Return attribution per position/class/platform/geo
+
+**Risk** (2):
+- `mido_risk_metrics` — Volatility, Sharpe, Sortino, VaR/CVaR
+- `mido_stress_test` — 5 preset scenarios + custom shocks
+
+**Planning** (5):
+- `mido_cost_analysis`, `mido_fundamentals`, `mido_fund_lookthrough`, `mido_rebalance_advisor`, `mido_scenario_planner`
+
+All tools support `format: 'markdown'|'json'`. Services in `src/Service/Mcp/`.
 
 ### Claude Desktop Configuration
 Claude Desktop gebruikt `mcp-remote` als stdio proxy voor remote HTTP servers.

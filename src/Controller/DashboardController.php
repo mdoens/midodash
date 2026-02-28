@@ -105,6 +105,10 @@ class DashboardController extends AbstractController
                 $cached['monthly_overview'] = $returnsService->getMonthlyOverview();
                 $history = $snapshotService->getHistory(365);
                 $cached['history'] = $history;
+                if (count($history) > 1) {
+                    $cached['history_chart'] = $this->buildHistoryChart($chartBuilder, $history);
+                    $cached['allocation_chart'] = $this->buildAllocationHistoryChart($chartBuilder, $history);
+                }
                 $response = $this->render('dashboard/index.html.twig', $cached);
                 $checks['full_render'] = 'OK: ' . $response->getStatusCode() . ' (' . strlen((string) $response->getContent()) . ' bytes)';
             } catch (\Throwable $e) {

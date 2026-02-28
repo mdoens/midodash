@@ -149,7 +149,7 @@
                 <div class="section-label"><span class="section-label__text">Asset Class vs Target</span></div>
                 <div class="flex gap-20">
                     <div class="chart-wrap chart-wrap--pie">
-                        {{ render_chart(pie_chart) }}
+                        {% if pie_chart is defined and pie_chart is not null %}{{ render_chart(pie_chart) }}{% endif %}
                     </div>
                     <div class="flex-1">
                         {% set acColors = { equity: '#22c55e', fixed_income: '#3b82f6', alternatives: '#f59e0b' } %}
@@ -593,7 +593,7 @@
             <div class="glass">
                 <div class="section-label"><span class="section-label__text">Factor Exposure v8.0</span></div>
                 <div class="chart-wrap chart-wrap--h280">
-                    {{ render_chart(radar_chart) }}
+                    {% if radar_chart is defined and radar_chart is not null %}{{ render_chart(radar_chart) }}{% endif %}
                 </div>
             </div>
 
@@ -634,7 +634,7 @@
             <div class="glass">
                 <div class="section-label"><span class="section-label__text">Performance per Positie</span></div>
                 <div class="chart-wrap chart-wrap--h280">
-                    {{ render_chart(performance_chart) }}
+                    {% if performance_chart is defined and performance_chart is not null %}{{ render_chart(performance_chart) }}{% endif %}
                 </div>
             </div>
         </div>
