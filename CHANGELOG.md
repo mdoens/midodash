@@ -4,13 +4,24 @@
 
 ### Fixed
 - **Saxo login status** — dashboard cache wordt geïnvalideerd na Saxo callback, zodat "Saxo ✓" direct zichtbaar is
-- **Lege dividenden** — Saxo transacties (trades + cash/dividenden/deposits) worden direct geïmporteerd na login
-- **Totaal gestort incorrect** — 3-layer fallback: Saxo API → DB deposit transacties → cost basis
-- **Import command robuuster** — `ensureValidToken()` probeert actief te refreshen i.p.v. passieve `isAuthenticated()` check
+- **Saxo cash dubbeltelling** — CashBalance bevat al open order geld, niet meer optellen bij allocatie
+- **Saxo dividenden** — `BkRecordId` als fallback external ID in cash import (CorporateAction heeft geen TransactionId/BookingId)
+- **Saxo deposits over-counted** — clean reimport: 11 deposits (€547K) i.p.v. 17 (€839K) door import bug
+- **Totaal gestort correct** — was €1.709K, nu €1.417K (rendement: +1.4% i.p.v. -15.9%)
+- **Totaal gestort fallback** — 3-layer: Saxo API → DB deposit transacties → cost basis
+- **Import command robuuster** — `ensureValidToken()` probeert actief te refreshen
+
+### Added
+- **`/health/audit`** — volledige breakdown van deposits, dividenden, returns per platform
+- **`/health/reimport-saxo`** — schone Saxo transactie re-import (delete + reimport)
+- **Post-login import** — Saxo trades + cash transacties worden direct geïmporteerd na Saxo login
 
 ### Changed
 - **Import cron** — van 1x/dag (19:00) naar elke 6 uur
 - **SaxoClient** — nieuwe `ensureValidToken()` public methode
+
+### Known Issues
+- **IB dividenden ontbreken** — IB Flex query bevat geen CashTransaction dividend records. Moet handmatig aangepast worden in IB Flex Query portal.
 
 ---
 
