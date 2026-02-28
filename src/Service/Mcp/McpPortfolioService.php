@@ -193,12 +193,8 @@ class McpPortfolioService
             $balance = $this->saxoClient->getAccountBalance();
             $saxoCash = (float) ($balance['CashBalance'] ?? 0);
 
-            // Include open order value in Saxo cash — Saxo deducts from CashBalance
-            // when order is placed, but position doesn't exist yet
+            // CashBalance already includes money reserved for open orders — do NOT add order values
             $openOrders = $this->saxoClient->getOpenOrders() ?? [];
-            foreach ($openOrders as $order) {
-                $saxoCash += (float) $order['order_value'];
-            }
         } catch (\Throwable $e) {
             $this->logger->debug('Saxo data fetch failed', ['error' => $e->getMessage()]);
         }
