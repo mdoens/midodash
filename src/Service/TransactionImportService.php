@@ -363,7 +363,7 @@ class TransactionImportService
         $skipped = 0;
 
         foreach ($transactions as $tx) {
-            $externalId = (string) ($tx['TransactionId'] ?? $tx['BookingId'] ?? '');
+            $externalId = (string) ($tx['TransactionId'] ?? $tx['BookingId'] ?? $tx['BkRecordId'] ?? '');
             if ($externalId === '') {
                 continue;
             }

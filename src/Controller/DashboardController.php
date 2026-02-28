@@ -258,7 +258,87 @@ class DashboardController extends AbstractController
             "SELECT type, COUNT(*) as cnt, SUM(COALESCE(amount_eur, amount)) as total FROM {$table} WHERE platform = 'ib' GROUP BY type ORDER BY type"
         )->fetchAllAssociative();
 
+        // 9. IB Flex XML: check if CashTransaction nodes exist
+        $ibCacheFile = $this->getParameter('kernel.project_dir') . '/var/ib_statement.xml';
+        if (file_exists($ibCacheFile)) {
+            $xml = file_get_contents($ibCacheFile);
+            if ($xml !== false) {
+                libxml_use_internal_errors(true);
+                $doc = simplexml_load_string($xml);
+                if ($doc !== false) {
+                    $trades = $doc->xpath('//Trade') ?: [];
+                    $cashTxs = $doc->xpath('//CashTransaction') ?: [];
+                    $audit['ib_xml'] = [
+                        'file_size' => strlen($xml),
+                        'trade_nodes' => count($trades),
+                        'cash_transaction_nodes' => count($cashTxs),
+                    ];
+                    // Show first 3 CashTransaction nodes
+                    if (count($cashTxs) > 0) {
+                        $samples = [];
+                        foreach (array_slice($cashTxs, 0, 5) as $ct) {
+                            $attrs = [];
+                            foreach ($ct->attributes() as $k => $v) {
+                                $attrs[(string) $k] = (string) $v;
+                            }
+                            $samples[] = $attrs;
+                        }
+                        $audit['ib_cash_tx_samples'] = $samples;
+                    }
+                }
+            }
+        } else {
+            $audit['ib_xml'] = 'No IB cache file';
+        }
+
         return $this->json($audit);
+    }
+
+    #[Route('/health/reimport-saxo', name: 'health_reimport_saxo')]
+    public function reimportSaxo(
+        SaxoClient $saxoClient,
+        TransactionImportService $importService,
+        DashboardCacheService $dashboardCache,
+    ): JsonResponse {
+        $result = [];
+
+        // Delete existing Saxo transactions
+        $deletedCash = $importService->deleteSaxoCashTransactions();
+        $deletedTrades = $importService->deletePlatformTransactions('saxo');
+        $result['deleted_cash'] = $deletedCash;
+        $result['deleted_trades'] = $deletedTrades;
+
+        if (!$saxoClient->ensureValidToken()) {
+            $result['error'] = 'Saxo not authenticated';
+
+            return $this->json($result);
+        }
+
+        // Re-import trades
+        $trades = $saxoClient->getHistoricalTrades();
+        if ($trades !== null) {
+            $r = $importService->importFromSaxoOrders($trades);
+            $result['trades'] = sprintf('%d imported, %d skipped', $r['imported'], $r['skipped']);
+        } else {
+            $result['trades'] = 'null (API failed)';
+        }
+
+        // Re-import cash transactions
+        $cashTxs = $saxoClient->getCashTransactions();
+        if ($cashTxs !== null) {
+            $r = $importService->importFromSaxoCashTransactions($cashTxs);
+            $result['cash'] = sprintf('%d imported, %d skipped', $r['imported'], $r['skipped']);
+        } else {
+            $result['cash'] = 'null (API failed)';
+        }
+
+        $remapped = $importService->remapPositionNames();
+        $result['remapped'] = $remapped;
+
+        $dashboardCache->invalidate();
+        $result['cache'] = 'invalidated';
+
+        return $this->json($result);
     }
 
     #[Route('/health/import', name: 'health_import')]
