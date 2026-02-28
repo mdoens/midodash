@@ -1,5 +1,13 @@
 # Changelog — MidoDash
 
+## 2026-02-28 (d)
+
+### Fixed
+- **T9 Recession trigger** — was hardcoded `active: false`, nu gebaseerd op `CalculationService::calculateRecessionProbability()` (multi-factor: yield curve, HY spread, VIX, jobless claims, consumer sentiment). Activeert bij score ≥ 30% (ELEVATED). MCP dashboard toont probability in trigger label
+- **Recession probability VIX** — `calculateRecessionProbability()` gebruikte FRED (vorige dag), nu Yahoo Finance real-time als primary met FRED fallback — consistent met T1 en crisis protocol
+
+---
+
 ## 2026-02-28 (c)
 
 ### Fixed

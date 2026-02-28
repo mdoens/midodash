@@ -21,6 +21,7 @@ class CalculationService
         private readonly HttpClientInterface $httpClient,
         private readonly CacheInterface $cache,
         private readonly LoggerInterface $logger,
+        private readonly MarketDataService $marketData,
     ) {}
 
     /**
@@ -112,8 +113,13 @@ class CalculationService
             $factors[] = ['name' => 'HY Credit Spread', 'status' => 'ELEVATED', 'contribution' => 8];
         }
 
-        $vix = $this->fredApi->getLatestValue('VIXCLS');
-        if ($vix !== null && $vix['value'] > 30) {
+        // Primary: Yahoo Finance real-time VIX, fallback: FRED daily
+        $vixValue = $this->marketData->getVixRealtime();
+        if ($vixValue === null) {
+            $vix = $this->fredApi->getLatestValue('VIXCLS');
+            $vixValue = $vix['value'] ?? null;
+        }
+        if ($vixValue !== null && $vixValue > 30) {
             $score += 10;
             $factors[] = ['name' => 'VIX', 'status' => 'HIGH', 'contribution' => 10];
         }

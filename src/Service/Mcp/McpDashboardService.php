@@ -196,7 +196,8 @@ class McpDashboardService
         $lines[] = $this->formatTriggerLine('T1 Crash (VIX>30)', $triggers['T1_crash']['active']);
         $lines[] = $this->formatTriggerLine('T3 Stagflation', $triggers['T3_stagflation']['active']);
         $lines[] = $this->formatTriggerLine('T5 Credit Stress', $triggers['T5_credit']['active']);
-        $lines[] = $this->formatTriggerLine('T9 Recession', $triggers['T9_recession']['active']);
+        $t9prob = $triggers['T9_recession']['probability'] ?? 0;
+        $lines[] = $this->formatTriggerLine("T9 Recession ({$t9prob}%≥30%)", $triggers['T9_recession']['active']);
         $lines[] = '';
         $lines[] = "   Active triggers:    {$data['triggers']['active_count']} of 4";
         $lines[] = '';

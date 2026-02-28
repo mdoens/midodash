@@ -92,16 +92,19 @@ class TriggerService
     }
 
     /**
-     * @return array{active: bool, name: string, value: float|null}
+     * @return array{active: bool, name: string, probability: int, threshold: int, status: string, factors: array<int, array{name: string, status: string, contribution: int}>}
      */
     private function evaluateT9(): array
     {
-        $yieldCurve = $this->fredApi->getLatestValue('T10Y2Y');
+        $recession = $this->calculations->calculateRecessionProbability();
 
         return [
-            'active' => false,
+            'active' => $recession['probability'] >= 30,
             'name' => 'Recession Warning',
-            'value' => $yieldCurve['value'] ?? null,
+            'probability' => $recession['probability'],
+            'threshold' => 30,
+            'status' => $recession['status'],
+            'factors' => $recession['factors'],
         ];
     }
 
