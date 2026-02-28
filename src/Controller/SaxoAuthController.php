@@ -6,6 +6,8 @@ namespace App\Controller;
 
 use App\Service\DashboardCacheService;
 use App\Service\SaxoClient;
+use App\Service\TransactionImportService;
+use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -23,8 +25,13 @@ class SaxoAuthController extends AbstractController
     }
 
     #[Route('/saxo/callback', name: 'saxo_callback')]
-    public function callback(SaxoClient $saxoClient, DashboardCacheService $dashboardCache, Request $request): Response
-    {
+    public function callback(
+        SaxoClient $saxoClient,
+        DashboardCacheService $dashboardCache,
+        TransactionImportService $importService,
+        LoggerInterface $logger,
+        Request $request,
+    ): Response {
         $code = $request->query->get('code');
 
         if ($code === null) {
@@ -53,6 +60,9 @@ class SaxoAuthController extends AbstractController
             // Verify authentication works after token exchange
             if ($saxoClient->isAuthenticated()) {
                 $this->addFlash('success', 'Saxo login succesvol! Tokens opgeslagen.');
+
+                // Import Saxo transactions immediately (catch-up for missed cron runs)
+                $this->importSaxoTransactions($saxoClient, $importService, $logger);
             } else {
                 $this->addFlash('error', 'Saxo tokens opgeslagen maar authenticatie-check faalt — controleer logs.');
             }
@@ -61,6 +71,30 @@ class SaxoAuthController extends AbstractController
         }
 
         return $this->redirectToRoute('dashboard');
+    }
+
+    private function importSaxoTransactions(
+        SaxoClient $saxoClient,
+        TransactionImportService $importService,
+        LoggerInterface $logger,
+    ): void {
+        try {
+            $trades = $saxoClient->getHistoricalTrades();
+            if ($trades !== null) {
+                $result = $importService->importFromSaxoOrders($trades);
+                $logger->info('Post-login Saxo trade import', $result);
+            }
+
+            $cashTxs = $saxoClient->getCashTransactions();
+            if ($cashTxs !== null) {
+                $result = $importService->importFromSaxoCashTransactions($cashTxs);
+                $logger->info('Post-login Saxo cash import', $result);
+            }
+
+            $importService->remapPositionNames();
+        } catch (\Throwable $e) {
+            $logger->error('Post-login Saxo import failed', ['error' => $e->getMessage()]);
+        }
     }
 
     #[Route('/saxo/refresh', name: 'saxo_refresh')]

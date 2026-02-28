@@ -52,8 +52,8 @@ class TransactionImportCommand extends Command
         // ── Saxo transactions ──
         $output->writeln('<info>Importing Saxo transactions...</info>');
 
-        if (!$this->saxoClient->isAuthenticated()) {
-            $output->writeln('<comment>Saxo not authenticated, skipping.</comment>');
+        if (!$this->saxoClient->ensureValidToken()) {
+            $output->writeln('<comment>Saxo not authenticated (token refresh failed), skipping.</comment>');
         } else {
             $trades = $this->saxoClient->getHistoricalTrades();
             if ($trades === null) {

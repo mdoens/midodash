@@ -36,19 +36,28 @@ class ReturnsService
         }
 
         if ($saxoPerformance !== null && ($saxoPerformance['total_deposited'] ?? 0) > 0) {
-            // Use exact Saxo deposit/withdrawal data from performance API
+            // Primary: exact Saxo deposit/withdrawal data from performance API
             $saxoDeposits = (float) $saxoPerformance['total_deposited'];
             $saxoWithdrawals = (float) ($saxoPerformance['total_withdrawn'] ?? 0);
             $totalWithdrawals += $saxoWithdrawals;
         } else {
-            // Fallback: derive net deposits from allocation (cost basis = value - P/L)
-            $saxoDeposits = 0.0;
-            foreach ($allocation['positions'] ?? [] as $pos) {
-                if (($pos['platform'] ?? '') === 'Saxo' && ($pos['value'] ?? 0) > 0) {
-                    $saxoDeposits += (float) ($pos['value'] ?? 0) - (float) ($pos['pl'] ?? 0);
+            // Fallback 1: Saxo deposit transactions from database
+            $saxoDbDeposits = $this->transactionRepository->sumByType('deposit', 'saxo');
+            $saxoDbWithdrawals = abs($this->transactionRepository->sumByType('withdrawal', 'saxo'));
+
+            if ($saxoDbDeposits > 0) {
+                $saxoDeposits = $saxoDbDeposits;
+                $totalWithdrawals += $saxoDbWithdrawals;
+            } else {
+                // Fallback 2: derive net deposits from allocation (cost basis = value - P/L)
+                $saxoDeposits = 0.0;
+                foreach ($allocation['positions'] ?? [] as $pos) {
+                    if (($pos['platform'] ?? '') === 'Saxo' && ($pos['value'] ?? 0) > 0) {
+                        $saxoDeposits += (float) ($pos['value'] ?? 0) - (float) ($pos['pl'] ?? 0);
+                    }
                 }
+                $saxoDeposits += (float) ($allocation['saxo_cash'] ?? 0);
             }
-            $saxoDeposits += (float) ($allocation['saxo_cash'] ?? 0);
         }
 
         $totalDeposits = $ibDeposits + $saxoDeposits;

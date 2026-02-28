@@ -191,8 +191,8 @@ class DashboardController extends AbstractController
 
         try {
             // Saxo
-            if (!$saxoClient->isAuthenticated()) {
-                $result['saxo'] = 'Not authenticated';
+            if (!$saxoClient->ensureValidToken()) {
+                $result['saxo'] = 'Not authenticated (token refresh failed)';
             } else {
                 // Import trades
                 $trades = $saxoClient->getHistoricalTrades();

@@ -1,5 +1,19 @@
 # Changelog — MidoDash
 
+## 2026-02-28 (b)
+
+### Fixed
+- **Saxo login status** — dashboard cache wordt geïnvalideerd na Saxo callback, zodat "Saxo ✓" direct zichtbaar is
+- **Lege dividenden** — Saxo transacties (trades + cash/dividenden/deposits) worden direct geïmporteerd na login
+- **Totaal gestort incorrect** — 3-layer fallback: Saxo API → DB deposit transacties → cost basis
+- **Import command robuuster** — `ensureValidToken()` probeert actief te refreshen i.p.v. passieve `isAuthenticated()` check
+
+### Changed
+- **Import cron** — van 1x/dag (19:00) naar elke 6 uur
+- **SaxoClient** — nieuwe `ensureValidToken()` public methode
+
+---
+
 ## 2026-02-28
 
 ### Fixed

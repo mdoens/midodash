@@ -820,6 +820,15 @@ class SaxoClient
         }
     }
 
+    /**
+     * Actively ensure we have a valid token (refresh if needed).
+     * Use this instead of isAuthenticated() when you need to make API calls.
+     */
+    public function ensureValidToken(): bool
+    {
+        return $this->getValidToken() !== null;
+    }
+
     public function isAuthenticated(): bool
     {
         $cached = $this->loadCache();
