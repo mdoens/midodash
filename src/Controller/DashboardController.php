@@ -150,6 +150,22 @@ class DashboardController extends AbstractController
         $tokenFile = $this->getParameter('kernel.project_dir') . '/var/saxo_tokens.json';
         $balance = $dataBuffer->retrieve('saxo', 'balance');
 
+        // Read raw token data for debugging
+        $tokenDebug = [];
+        if (file_exists($tokenFile)) {
+            $raw = json_decode((string) file_get_contents($tokenFile), true);
+            if (is_array($raw)) {
+                $tokenDebug = [
+                    'created_at' => isset($raw['created_at']) ? date('Y-m-d H:i:s', (int) $raw['created_at']) : null,
+                    'expires_in' => $raw['expires_in'] ?? null,
+                    'refresh_token_expires_in' => $raw['refresh_token_expires_in'] ?? null,
+                    'refresh_token_created_at' => isset($raw['refresh_token_created_at']) ? date('Y-m-d H:i:s', (int) $raw['refresh_token_created_at']) : null,
+                    'has_refresh_token' => isset($raw['refresh_token']),
+                    'access_token_prefix' => isset($raw['access_token']) ? substr($raw['access_token'], 0, 10) . '...' : null,
+                ];
+            }
+        }
+
         return new JsonResponse([
             'token_file_exists' => file_exists($tokenFile),
             'token_file_size' => file_exists($tokenFile) ? filesize($tokenFile) : 0,
@@ -158,7 +174,8 @@ class DashboardController extends AbstractController
             'token_expiry' => $saxoClient->getTokenExpiry(),
             'token_expiry_human' => $saxoClient->getTokenExpiry() !== null ? date('Y-m-d H:i:s', $saxoClient->getTokenExpiry()) : null,
             'refresh_ttl_seconds' => $saxoClient->getRefreshTokenTtl(),
-            'balance' => $balance !== null ? $balance['data'] : null,
+            'token_debug' => $tokenDebug,
+            'balance_buffered' => $balance !== null,
         ]);
     }
 

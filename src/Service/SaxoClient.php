@@ -69,6 +69,8 @@ class SaxoClient
             throw new \RuntimeException('Token exchange failed: ' . json_encode($tokens));
         }
 
+        // Track refresh token creation time separately (critical for expiry calculation)
+        $tokens['refresh_token_created_at'] = time();
         $this->saveTokens($tokens);
         $this->clearCache();
         $this->logger->info('Saxo token exchange successful', [
@@ -143,8 +145,29 @@ class SaxoClient
                 $mergedTokens = array_merge($oldTokens, $newTokens);
                 unset($mergedTokens['created_at']); // Will be set fresh by saveTokens()
 
+                // Track refresh token origin separately:
+                // If Saxo returned a NEW refresh_token, update its creation time.
+                // If not, preserve the original creation time so expiry calculation stays accurate.
+                if (isset($newTokens['refresh_token'])) {
+                    $mergedTokens['refresh_token_created_at'] = time();
+                    $this->logger->info('Saxo: new refresh_token received in refresh response');
+                } else {
+                    // Preserve original refresh_token_created_at
+                    $mergedTokens['refresh_token_created_at'] = $oldTokens['refresh_token_created_at']
+                        ?? $oldTokens['created_at']
+                        ?? time();
+                    $this->logger->info('Saxo: no new refresh_token in response, preserving original expiry');
+                }
+
                 $this->saveTokens($mergedTokens);
-                $this->logger->info('Saxo token refreshed successfully', ['attempt' => $attempt]);
+                $this->logger->info('Saxo token refreshed successfully', [
+                    'attempt' => $attempt,
+                    'new_access_expires_in' => $newTokens['expires_in'] ?? '?',
+                    'has_new_refresh' => isset($newTokens['refresh_token']),
+                    'refresh_ttl' => isset($mergedTokens['refresh_token_expires_in'])
+                        ? (int) $mergedTokens['refresh_token_created_at'] + (int) $mergedTokens['refresh_token_expires_in'] - time()
+                        : '?',
+                ]);
 
                 return $mergedTokens;
             } catch (\Throwable $e) {
@@ -852,11 +875,16 @@ class SaxoClient
     public function getRefreshTokenTtl(): ?int
     {
         $tokens = $this->loadTokens();
-        if ($tokens === null || !isset($tokens['created_at'], $tokens['refresh_token_expires_in'])) {
+        if ($tokens === null || !isset($tokens['refresh_token_expires_in'])) {
             return null;
         }
 
-        $expiresAt = (int) $tokens['created_at'] + (int) $tokens['refresh_token_expires_in'];
+        $refreshCreatedAt = (int) ($tokens['refresh_token_created_at'] ?? $tokens['created_at'] ?? 0);
+        if ($refreshCreatedAt === 0) {
+            return null;
+        }
+
+        $expiresAt = $refreshCreatedAt + (int) $tokens['refresh_token_expires_in'];
 
         return max(0, $expiresAt - time());
     }
@@ -911,10 +939,17 @@ class SaxoClient
      */
     private function tryRefreshOrNull(array $tokens): ?string
     {
-        if (isset($tokens['refresh_token_expires_in'], $tokens['created_at'])) {
-            $refreshExpiresAt = (int) $tokens['created_at'] + (int) $tokens['refresh_token_expires_in'];
+        $refreshCreatedAt = (int) ($tokens['refresh_token_created_at'] ?? $tokens['created_at'] ?? 0);
+        $refreshExpiresIn = (int) ($tokens['refresh_token_expires_in'] ?? 0);
+
+        if ($refreshCreatedAt > 0 && $refreshExpiresIn > 0) {
+            $refreshExpiresAt = $refreshCreatedAt + $refreshExpiresIn;
             if (time() > $refreshExpiresAt) {
-                $this->logger->warning('Saxo: both access and refresh tokens expired, re-auth required');
+                $this->logger->warning('Saxo: refresh token expired, re-auth required', [
+                    'refresh_created_at' => date('H:i:s', $refreshCreatedAt),
+                    'refresh_expires_in' => $refreshExpiresIn,
+                    'expired_ago' => time() - $refreshExpiresAt,
+                ]);
 
                 return null;
             }
@@ -935,8 +970,9 @@ class SaxoClient
     private function tryRefresh(array $tokens): ?array
     {
         // Don't attempt refresh if refresh token is expired
-        if (isset($tokens['refresh_token_expires_in'], $tokens['created_at'])) {
-            $refreshExpiresAt = (int) $tokens['created_at'] + (int) $tokens['refresh_token_expires_in'];
+        $refreshCreatedAt = (int) ($tokens['refresh_token_created_at'] ?? $tokens['created_at'] ?? 0);
+        if ($refreshCreatedAt > 0 && isset($tokens['refresh_token_expires_in'])) {
+            $refreshExpiresAt = $refreshCreatedAt + (int) $tokens['refresh_token_expires_in'];
             if (time() > $refreshExpiresAt) {
                 $this->logger->info('Saxo: refresh token expired, proactive refresh skipped');
 
