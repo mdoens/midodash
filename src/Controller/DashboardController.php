@@ -504,6 +504,7 @@ class DashboardController extends AbstractController
             $saxoPositions,
             $ibCashBalance,
             $saxoCashBalance + $openOrdersValue,
+            $saxoOpenOrders,
         );
 
         // Log matched positions

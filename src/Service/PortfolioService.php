@@ -82,6 +82,7 @@ class PortfolioService
      * @param array<int, array<string, mixed>>|null $saxoPositions
      * @param float $ibCash
      * @param float $saxoCash
+     * @param array<int, array<string, mixed>> $openOrders Open orders to match to positions
      * @return array{
      *   positions: array<string, array<string, mixed>>,
      *   total_portfolio: float,
@@ -100,6 +101,7 @@ class PortfolioService
         ?array $saxoPositions,
         float $ibCash,
         float $saxoCash,
+        array $openOrders = [],
     ): array {
         $targets = $this->getTargets();
         $symbolMap = $this->config['symbol_map'] ?? [];
@@ -118,6 +120,10 @@ class PortfolioService
                 'pl' => 0.0,
                 'pl_pct' => 0.0,
                 'matched' => false,
+                'current_pct' => 0.0,
+                'drift' => 0.0,
+                'drift_relative' => 0.0,
+                'status' => 'OK',
             ];
         }
 
@@ -227,6 +233,35 @@ class PortfolioService
             }
         }
 
+        // Match open orders to positions (pending investment)
+        $symbolMap2 = $this->config['symbol_map'] ?? [];
+        foreach ($openOrders as $order) {
+            $orderSymbol = $order['symbol'] ?? '';
+            $orderDesc = $order['description'] ?? '';
+            $orderValue = (float) ($order['order_value'] ?? $order['cash_amount'] ?? 0);
+            if ($orderValue <= 0) {
+                continue;
+            }
+
+            // Match by symbol_map, description, or stripped symbol
+            $matchedName = $symbolMap2[$orderSymbol] ?? null;
+            if ($matchedName === null && str_contains($orderSymbol, ':')) {
+                $matchedName = $symbolMap2[explode(':', $orderSymbol)[0]] ?? null;
+            }
+            if ($matchedName === null) {
+                foreach ($targets as $name => $config) {
+                    if (stripos($orderDesc, $name) !== false || stripos($orderDesc, (string) $config['ticker']) !== false) {
+                        $matchedName = $name;
+                        break;
+                    }
+                }
+            }
+
+            if ($matchedName !== null && isset($positions[$matchedName])) {
+                $positions[$matchedName]['pending_order'] = $orderValue;
+            }
+        }
+
         // Calculate totals
         $totalInvested = array_sum(array_column($positions, 'value'));
         $totalCash = $ibCash + $saxoCash;
@@ -243,10 +278,21 @@ class PortfolioService
                 $pos['pl_pct'] = $cost > 0 ? ($pos['pl'] / $cost) * 100 : 0;
             }
 
-            // Status
+            // Status — account for pending open orders
+            $pendingOrder = $pos['pending_order'] ?? 0.0;
+            $effectiveValue = $pos['value'] + $pendingOrder;
+            $effectivePct = $totalPortfolio > 0 ? ($effectiveValue / $totalPortfolio) * 100 : 0;
+            $effectiveDrift = $effectivePct - $pos['target'];
+            $effectiveDriftRelative = $pos['target'] > 0 ? ($effectiveDrift / $pos['target']) * 100 : 0;
+
             $missing = $pos['target'] > 0 && $pos['value'] == 0;
-            if ($missing) {
+            if ($missing && $pendingOrder > 0) {
+                $pos['status'] = 'PENDING';
+            } elseif ($missing) {
                 $pos['status'] = 'ONTBREEKT';
+            } elseif ($pendingOrder > 0 && abs($effectiveDrift) < 5 && abs($effectiveDriftRelative) < 25) {
+                // After order execution, position will be within band
+                $pos['status'] = 'PENDING';
             } elseif (abs($pos['drift']) >= 5 || abs($pos['drift_relative']) >= 25) {
                 $pos['status'] = 'REBAL';
             } elseif (abs($pos['drift']) >= 3) {
@@ -280,13 +326,20 @@ class PortfolioService
         }
 
         // Rebalancing alerts (5/25 rule)
-        $rebalNeeded = array_filter($positions, function (array $p): bool {
-            if ($p['target'] === 0) {
-                return false;
+        // Filter positions needing rebalance (drift/status are modified by-reference in the loop above)
+        $rebalNeeded = [];
+        foreach ($positions as $name => $p) {
+            if ($p['target'] === 0 || $p['status'] === 'PENDING') { // @phpstan-ignore identical.alwaysFalse (status is modified by-reference above)
+                continue;
             }
-
-            return abs($p['drift']) >= 5 || abs($p['drift_relative']) >= 25;
-        });
+            /** @var float $drift */
+            $drift = $p['drift'];
+            /** @var float $driftRelative */
+            $driftRelative = $p['drift_relative'];
+            if (abs($drift) >= 5 || abs($driftRelative) >= 25) {
+                $rebalNeeded[$name] = $p;
+            }
+        }
 
         // Dry powder
         $dryPowder = 0.0;

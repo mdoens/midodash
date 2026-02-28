@@ -31,6 +31,7 @@
 
 {% macro statusBadge(status) %}
 {% if status == 'OK' %}<span class="badge badge--green">OK</span>
+{% elseif status == 'PENDING' %}<span class="badge badge--blue">PENDING</span>
 {% elseif status == 'MONITOR' %}<span class="badge badge--yellow">MONITOR</span>
 {% elseif status == 'REBAL' %}<span class="badge badge--red">REBAL</span>
 {% elseif status == 'ONTBREEKT' %}<span class="badge badge--red">ONTBREEKT</span>

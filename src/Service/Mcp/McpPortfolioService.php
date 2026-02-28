@@ -186,6 +186,7 @@ class McpPortfolioService
         $ibPositions = $this->ibClient->getPositions();
         $saxoPositions = null;
         $saxoCash = 0.0;
+        $openOrders = [];
 
         try {
             $saxoPositions = $this->saxoClient->getPositions();
@@ -194,11 +195,9 @@ class McpPortfolioService
 
             // Include open order value in Saxo cash — Saxo deducts from CashBalance
             // when order is placed, but position doesn't exist yet
-            $openOrders = $this->saxoClient->getOpenOrders();
-            if ($openOrders !== null) {
-                foreach ($openOrders as $order) {
-                    $saxoCash += (float) $order['order_value'];
-                }
+            $openOrders = $this->saxoClient->getOpenOrders() ?? [];
+            foreach ($openOrders as $order) {
+                $saxoCash += (float) $order['order_value'];
             }
         } catch (\Throwable $e) {
             $this->logger->debug('Saxo data fetch failed', ['error' => $e->getMessage()]);
@@ -223,7 +222,7 @@ class McpPortfolioService
         $ibCashReport = $this->ibClient->getCashReport();
         $ibCash = (float) ($ibCashReport['ending_cash'] ?? 0);
 
-        return $this->portfolioService->calculateAllocations($ibPositions, $saxoPositions, $ibCash, $saxoCash);
+        return $this->portfolioService->calculateAllocations($ibPositions, $saxoPositions, $ibCash, $saxoCash, $openOrders);
     }
 
     /**
